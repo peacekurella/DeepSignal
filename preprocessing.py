@@ -66,7 +66,9 @@ humanSkeleton = [
 # Each subject has 'joints19' attribute with x-y-z coords for each joint
 # Each coordinate consists of a list of position values corresponding to a frame
 # Collect all of the joint positions for each frame, for later examination
-frame_joints = []
+leftSellerFrameJoints = []
+rightSellerFrameJoints = []
+buyerFrameJoints = []
 for f in range(0, len(leftSellerJoints[0])):    
     jointList = []
     for i in range(0, len(leftSellerJoints), 3):
@@ -74,61 +76,93 @@ for f in range(0, len(leftSellerJoints[0])):
         y = leftSellerJoints[i + 1][f]
         z = leftSellerJoints[i + 2][f]
         jointList.append((x, y, z))
+    leftSellerFrameJoints.append(jointList)
 
-#    for i in range(0, len(rightSellerJoints), 3):
-#        x = leftSellerJoints[i][f]
-#        y = leftSellerJoints[i + 1][f]
-#        z = leftSellerJoints[i + 2][f]
-#        jointList.append((x, y, z))
-#
-#    for i in range(0, len(buyerJoints), 3):
-#        x = leftSellerJoints[i][f]
-#        y = leftSellerJoints[i + 1][f]
-#        z = leftSellerJoints[i + 2][f]
-#        jointList.append((x, y, z))
+    jointList = []
+    for i in range(0, len(rightSellerJoints), 3):
+        x = rightSellerJoints[i][f]
+        y = rightSellerJoints[i + 1][f]
+        z = rightSellerJoints[i + 2][f]
+        jointList.append((x, y, z))
+    rightSellerFrameJoints.append(jointList)
 
-    frame_joints.append(jointList)
-
-print("Frame len: ", len(frame_joints), ", single frame: ", len(frame_joints[0]), ", single joint: ", len(frame_joints[0][0]))
+    jointList = []
+    for i in range(0, len(buyerJoints), 3):
+        x = buyerJoints[i][f]
+        y = buyerJoints[i + 1][f]
+        z = buyerJoints[i + 2][f]
+        jointList.append((x, y, z))
+    buyerFrameJoints.append(jointList)
 
 # Collect the lengths of each bone, giving a baseline expectation for each length. 
 base = []
 for start, end in humanSkeleton:
-        xs = frame_joints[0][start][0] - frame_joints[0][end][0]
-        ys = frame_joints[0][start][1] - frame_joints[0][end][1]
-        zs = frame_joints[0][start][2] - frame_joints[0][end][2]
+        xs = leftSellerFrameJoints[0][start][0] - leftSellerFrameJoints[0][end][0]
+        ys = leftSellerFrameJoints[0][start][1] - leftSellerFrameJoints[0][end][1]
+        zs = leftSellerFrameJoints[0][start][2] - leftSellerFrameJoints[0][end][2]
         base.append(math.sqrt(xs**2 + ys**2 + zs**2))
 
-# Within each frame, check if the bone lengths fall within expectations
-frame_bones = []
-problem_frame_joints = []
-for f in range(1, len(frame_joints)):
-    bone_lengths = []
-    faulty = False
+# Collect the length of each bone into a single list of lists
+# Format will be: leftBone1, rightBone1, buyerBone1, leftBone2, ...
+frameBones = []
+for f in range(0, len(leftSellerFrameJoints)):
+    boneLengths = []
 
-    # Check each bone within the frame
+    # Record length of each person's bones within the frame
+    # Keep the lengths in a flatter array to avoid parsing issues later. 
     for i in range(0, len(humanSkeleton)):
         start, end = humanSkeleton[i]
-        xs = frame_joints[f][start][0] - frame_joints[f][end][0]
-        ys = frame_joints[f][start][1] - frame_joints[f][end][1]
-        zs = frame_joints[f][start][2] - frame_joints[f][end][2]
-        length = math.sqrt(xs**2 + ys**2 + zs**2)
-        bone_lengths.append(length)
-        if (abs(length - base[i]) > 2):
-            faulty = True
-    if (faulty):
-        problem_frame_joints.append(f)
-    frame_bones.append(bone_lengths)
+        xs = leftSellerFrameJoints[f][start][0] - leftSellerFrameJoints[f][end][0]
+        ys = leftSellerFrameJoints[f][start][1] - leftSellerFrameJoints[f][end][1]
+        zs = leftSellerFrameJoints[f][start][2] - leftSellerFrameJoints[f][end][2]
+        boneLengths.append(math.sqrt(xs**2 + ys**2 + zs**2))
+        xs = rightSellerFrameJoints[f][start][0] - rightSellerFrameJoints[f][end][0]
+        ys = rightSellerFrameJoints[f][start][1] - rightSellerFrameJoints[f][end][1]
+        zs = rightSellerFrameJoints[f][start][2] - rightSellerFrameJoints[f][end][2]
+        boneLengths.append(math.sqrt(xs**2 + ys**2 + zs**2))
+        xs = buyerFrameJoints[f][start][0] - buyerFrameJoints[f][end][0]
+        ys = buyerFrameJoints[f][start][1] - buyerFrameJoints[f][end][1]
+        zs = buyerFrameJoints[f][start][2] - buyerFrameJoints[f][end][2]
+        boneLengths.append(math.sqrt(xs**2 + ys**2 + zs**2))
+    frameBones.append(boneLengths)
 
-maxes = []
-frame_bones = np.array(frame_bones)
-print(frame_bones.shape)
-print("%d faulty frames" % (len(problem_frame_joints)))
-for i in range(0, len(frame_bones[0])):
-    print(len(frame_bones[i]))
-#    print(np.mean(frame_bones, axis=i))
-print(base)
-# for i in range(0, 100):
-#    print(frame_bones[i][0])
-for i in frame_bones:
-    print(i[0])
+# Within each frame, check if the bone lengths fall within expectations
+# If not, add the frame to a list of bad frames for later use
+problemFrames = []
+frameBones = np.array(frameBones)  # Convert to find distribution stats easier
+means = np.mean(frameBones, axis=0)
+deviations = np.std(frameBones, axis=0)
+for f in range(0, len(frameBones)):
+    faulty = False
+    for i in range(0, len(frameBones[f])):
+        if (frameBones[f][i] < means[i] - 3 * deviations[i] or frameBones[f][i] > means[i] + 3 * deviations[i]):
+            problemFrames.append(f)
+            faulty = True
+            break
+print("%d faulty frames" % (len(problemFrames)))
+# print("Bone mean lengths: ", np.mean(frameBones, axis=0))
+# print("Bone std devs lengths: ", np.std(frameBones, axis=0))
+
+# Create partitions for writing out files, containing long, whole segments of good frames.
+# Specifically records which frames are targeted, then the x-y-z coordinates of each joint
+# for each person for each frame, in chronological order. 
+target = 0
+fileCount = 0
+base = os.path.basename(args.inp)  # Extract basename with pkl extension
+while (target < len(problemFrames) - 1):
+    # If there's a sequence of frames longer than 100 frames, write data to a text file.
+    if (problemFrames[target + 1] - problemFrames[target] > 100):
+        filename = ("%s/%s_part%d.txt" % (args.out, base[:-4], fileCount))
+        print('Writing to ' ,filename)
+        outFile = open(filename, 'w')
+        output = ('Frames %d:%d\n' % (problemFrames[target], problemFrames[target + 1]))
+        for i in range(problemFrames[target], problemFrames[target + 1], 3):
+            output += ('%s\n' % (','.join(str(e) for e in leftSellerFrameJoints[i // 3])))
+            output += ('%s\n' % (','.join(str(e) for e in rightSellerFrameJoints[i // 3 + 1])))
+            output += ('%s\n' % (','.join(str(e) for e in buyerFrameJoints[i // 3 + 2])))
+        outFile.write(output)
+        outFile.close()
+        fileCount += 1
+
+    # Move on to the next problematic frames
+    target += 1
