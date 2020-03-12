@@ -179,9 +179,16 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName)
     frames = len(leftSellerJoints[0])
 
     ani = anim.FuncAnimation(fig, update_plot, frames, fargs=(joints, points, bones, humanSkeleton), interval=50, repeat=False)
-    print(fileName+'.mp4')
-    ani.save(fileName + '.mp4', writer=writer)
 
+    # save only if filename is passed
+    if fileName:
+        print(fileName+'.mp4')
+        ani.save(fileName + '.mp4', writer=writer)
+    else:
+        plt.show()
+
+    # close plot
+    plt.close()
 
 
 
