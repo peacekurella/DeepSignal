@@ -4,6 +4,7 @@ import argparse
 import sys
 import math
 import numpy as np
+import copy
 
 parser = argparse.ArgumentParser(description='Preprocess videos from dataset, removing contaminated segments')
 parser.add_argument('inp',help='input pkl file')
@@ -61,7 +62,7 @@ humanSkeleton = [
         [0,9],
         [9,10],
         [10,11]
-    ]
+]
 
 # Each subject has 'joints19' attribute with x-y-z coords for each joint
 # Each coordinate consists of a list of position values corresponding to a frame
@@ -107,9 +108,9 @@ for start, end in humanSkeleton:
 frameBones = []
 for f in range(0, len(leftSellerFrameJoints)):
     boneLengths = []
-
+    
     # Record length of each person's bones within the frame
-    # Keep the lengths in a flatter array to avoid parsing issues later. 
+    # Keep the lengths in a flatter array to avoid timing issues later.
     for i in range(0, len(humanSkeleton)):
         start, end = humanSkeleton[i]
         xs = leftSellerFrameJoints[f][start][0] - leftSellerFrameJoints[f][end][0]
@@ -140,29 +141,42 @@ for f in range(0, len(frameBones)):
             faulty = True
             break
 print("%d faulty frames" % (len(problemFrames)))
-# print("Bone mean lengths: ", np.mean(frameBones, axis=0))
-# print("Bone std devs lengths: ", np.std(frameBones, axis=0))
-
+        # print("Bone mean lengths: ", np.mean(frameBones, axis=0))
+        # print("Bone std devs lengths: ", np.std(frameBones, axis=0))
+        
 # Create partitions for writing out files, containing long, whole segments of good frames.
 # Specifically records which frames are targeted, then the x-y-z coordinates of each joint
 # for each person for each frame, in chronological order. 
-target = 0
-fileCount = 0
-base = os.path.basename(args.inp)  # Extract basename with pkl extension
-while (target < len(problemFrames) - 1):
-    # If there's a sequence of frames longer than 100 frames, write data to a text file.
+segments = []
+for target in range(0, len(problemFrames) - 1):
+    # If there's a sequence of frames longer than 100 frames, add to the accepted segments.
     if (problemFrames[target + 1] - problemFrames[target] > 100):
-        filename = ("%s/%s_part%d.txt" % (args.out, base[:-4], fileCount))
-        print('Writing to ' ,filename)
-        outFile = open(filename, 'w')
-        output = ('Frames %d:%d\n' % (problemFrames[target], problemFrames[target + 1]))
-        for i in range(problemFrames[target], problemFrames[target + 1], 3):
-            output += ('%s\n' % (','.join(str(e) for e in leftSellerFrameJoints[i // 3])))
-            output += ('%s\n' % (','.join(str(e) for e in rightSellerFrameJoints[i // 3 + 1])))
-            output += ('%s\n' % (','.join(str(e) for e in buyerFrameJoints[i // 3 + 2])))
-        outFile.write(output)
-        outFile.close()
-        fileCount += 1
+        segments.append((problemFrames[target], problemFrames[target+1]))
 
-    # Move on to the next problematic frames
-    target += 1
+# Create a new copy of the data, to be reused for each data segment
+new_pickle = copy.deepcopy(group)
+fileCount = 0
+for seg in segments:
+    for i in range(0, len(group['subjects'])):
+        # Reset sizes of the 2d numpy arrays in the new pickle dictionary
+        new_pickle['subjects'][i]['bodyNormal'] = np.zeros((3, seg[1] - seg[0]))
+        new_pickle['subjects'][i]['faceNormal'] = np.zeros((3, seg[1] - seg[0]))
+        new_pickle['subjects'][i]['scores'] = np.zeros((19, seg[1] - seg[0]))
+        new_pickle['subjects'][i]['joints19'] = np.zeros((57, seg[1] - seg[0]))
+
+        # Use trimmed segments from original data
+        for j in range(0, 3):
+            new_pickle['subjects'][i]['bodyNormal'][j] = group['subjects'][i]['bodyNormal'][j][seg[0]:seg[1]]
+            new_pickle['subjects'][i]['faceNormal'][j] = group['subjects'][i]['faceNormal'][j][seg[0]:seg[1]]
+        for j in range(0, 19):
+            new_pickle['subjects'][i]['scores'][j] = group['subjects'][i]['scores'][j][seg[0]:seg[1]]
+        for j in range(0, 57):
+            new_pickle['subjects'][i]['joints19'][j] = group['subjects'][i]['joints19'][j][seg[0]:seg[1]]
+
+    # Write the trimmed data to the designated files
+    base = os.path.basename(args.inp)
+    outFile = open(('%s/%s_part%d.txt' % (args.out, base[:-4], fileCount)), 'wb')
+    print("Writing data from frames %d:%d to file %s_part%d.txt" % (seg[0], seg[1], base[:-4], fileCount))
+    pickle.dump(new_pickle, outFile)
+    outFile.close()
+    fileCount += 1
