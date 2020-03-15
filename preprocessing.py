@@ -222,8 +222,8 @@ def preprocess_frames(inp, output):
 
         # Write the trimmed data to the designated files
         base = os.path.basename(inp)
-        outFile = open(('%s/%s_part%d.txt' % (output, base[:-4], fileCount)), 'wb')
-        print("Writing data from frames %d:%d to file %s_part%d.txt" % (seg[0], seg[1], base[:-4], fileCount))
+        outFile = open(('%s/%s_part%d.pkl' % (output, base[:-4], fileCount)), 'wb')
+        print("Writing data from frames %d:%d to file %s_part%d.pkl" % (seg[0], seg[1], base[:-4], fileCount))
         pickle.dump(new_pickle, outFile)
         outFile.close()
         fileCount += 1
