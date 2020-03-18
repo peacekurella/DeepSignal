@@ -5,6 +5,7 @@ from absl import app
 from absl import flags
 import sys
 
+
 # set up flags
 FLAGS = flags.FLAGS
 
@@ -49,6 +50,7 @@ def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints, seqLength
     # create continuous sequences of seqLength
     dataset = tf.data.Dataset.from_tensor_slices(sequence)
     dataset = dataset.window(seqLength, 2, 1, True)
+
     # flatten dataset comin from window
     dataset = dataset.flat_map(lambda x: x)
     dataset = dataset.batch(seqLength, drop_remainder=True)
@@ -97,7 +99,8 @@ def tf_serialize_example(buyerJoints, leftSellerJoints, rightSellerJoints):
     :param rightSellerJoints: right seller joint sequence
     :return: Serialized features
     """
-    tf_string = tf.py_function(serialize_example, (buyerJoints, leftSellerJoints, rightSellerJoints), tf.string)
+    args = (buyerJoints, leftSellerJoints, rightSellerJoints)
+    tf_string = tf.py_function(serialize_example, args, tf.string)
     return tf.reshape(tf_string, ())
 
 def main(argv):

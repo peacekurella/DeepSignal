@@ -40,8 +40,6 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName)
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_xlim([-100, 100])
-    ax.set_zlim([-150, 150])
 
     # set up the writer
     # Set up formatting for the movie files
