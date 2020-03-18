@@ -9,7 +9,7 @@ import sys
 # set up flags
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('input', 'input', 'Input Directory')
+flags.DEFINE_string('input', 'normalized', 'Input Directory')
 flags.DEFINE_string('output', 'records', 'Output Directory')
 flags.DEFINE_integer('seqLength', 57, 'Sequence length')
 
