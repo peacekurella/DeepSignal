@@ -4,14 +4,16 @@ import os
 from absl import app
 from absl import flags
 import sys
-
+import random
 
 # set up flags
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('input', 'normalized', 'Input Directory')
-flags.DEFINE_string('output', 'records', 'Output Directory')
+flags.DEFINE_string('input', '../normalized', 'Input Directory')
+flags.DEFINE_string('train', '../train', 'Train record output directory')
+flags.DEFINE_string('test', '../test', 'Train record output directory')
 flags.DEFINE_integer('seqLength', 57, 'Sequence length')
+flags.DEFINE_integer('testFiles', 20, 'Number of pkl files used for testing')
 
 def split_into_features(sequence):
     """
@@ -114,14 +116,25 @@ def main(argv):
         print("Invalid input directory")
         sys.exit()
 
-    if not (os.path.isdir(FLAGS.output)):
+    if not (os.path.isdir(FLAGS.train)):
         try:
-            os.mkdir(FLAGS.output)
+            os.mkdir(FLAGS.train)
         except:
-            print("Error creating output directory")
+            print("Error creating train directory")
             sys.exit()
 
-    for file in os.listdir(FLAGS.input):
+    if not (os.path.isdir(FLAGS.test)):
+        try:
+            os.mkdir(FLAGS.test)
+        except:
+            print("Error creating test directory")
+            sys.exit()
+
+    # randomly shuffle the files
+    files = os.listdir(FLAGS.input)
+    random.shuffle(files)
+
+    for count, file in enumerate(files):
 
         # load the data
         pkl = os.path.join(FLAGS.input, file)
@@ -153,7 +166,10 @@ def main(argv):
         record = dataset.map(tf_serialize_example)
 
         # write to TFrecord file
-        filename = os.path.join(FLAGS.output, file.split('.')[0]+'.TFrecord')
+        if(count < FLAGS.testFiles):
+            filename = os.path.join(FLAGS.test, file.split('.')[0]+'.TFrecord')
+        else:
+            filename = os.path.join(FLAGS.train, file.split('.')[0] + '.TFrecord')
         writer = tf.data.experimental.TFRecordWriter(filename)
         writer.write(record)
         print(filename)

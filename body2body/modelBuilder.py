@@ -83,7 +83,7 @@ class Encoder(tf.keras.Model):
             dense_x = self.Fc(x)
 
             # add a short circuit for gradient flow
-            output = output + dense_x
+            output = tf.add(output, dense_x)
 
             # add dropout and layerNorm
             output = self.layerNorm(output)
@@ -192,8 +192,7 @@ class Decoder(tf.keras.Model):
 
         # initialize output dense layer
         self.Fc = tf.keras.layers.Dense(
-            output_size,
-            activation='tanh'
+            output_size
         )
 
         # initialize output dense layer
@@ -242,12 +241,11 @@ class Decoder(tf.keras.Model):
         else:
             initial_state = self.hidFc(hidden[0])
 
-        # add dropout and layerNorm
-        prev_output = self.layerNorm(prev_output)
+        # add dropout
         prev_output = self.Dropout(prev_output)
 
         # reshape to pass through GRU
-        prev_output = tf.reshape(prev_output, (prev_output.shape[0], 1, prev_output.shape[1]))
+        prev_output = tf.expand_dims(prev_output, axis=1)
 
         # pass through GRU
         prev_output, state = self.GRU(prev_output, initial_state=initial_state)
@@ -260,8 +258,8 @@ class Decoder(tf.keras.Model):
             else:
                 initial_state = self.hidFc(hidden[i + 1])
 
-            # add dropout and layerNorm
-            prev_output = self.layerNorm(prev_output)
+            # add dropout and batchNorm
+            prev_output = self.batchNorm(prev_output)
             prev_output = self.Dropout(prev_output)
 
             # pass through GRU

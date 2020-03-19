@@ -1,6 +1,6 @@
 import pickle
 import os
-from dataVis import create_animation
+from dataUtils.dataVis import create_animation
 import sys
 from absl import app
 from absl import flags

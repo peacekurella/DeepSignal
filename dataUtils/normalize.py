@@ -15,8 +15,8 @@ from pathlib import Path
 FLAGS = flags.FLAGS
 
 # TODO change input dir to preprocessed 
-flags.DEFINE_string('input', 'input', 'Input Directory')
-flags.DEFINE_string('output', 'normalized', 'Output Directory')
+flags.DEFINE_string('input', '../output', 'Input Directory')
+flags.DEFINE_string('output', '../normalized', 'Output Directory')
 
 
 def get_min_max(leftSellerJoints, rightSellerJoints, buyerJoints):
@@ -197,7 +197,7 @@ def normalize_pkl_files():
         file = str(file.with_suffix(''))
         
         # Write output file
-        outFile = open(('%s/%s_norm.pkl' % (FLAGS.output, file)), 'wb')
+        outFile = open(('%s/%s.pkl' % (FLAGS.output, file)), 'wb')
         print("Writing data from %s to file %s_norm.pkl" % (file, file))
         pickle.dump(new_pickle, outFile)
         outFile.close()
