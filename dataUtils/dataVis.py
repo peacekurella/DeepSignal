@@ -5,9 +5,9 @@ import matplotlib.animation as anim
 def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName):
     """
     Generates a video file of the subjects' motion
-    :param buyerJoints: 'joints19' of buyer
-    :param leftSellerJoints: 'joints19' of left seller
-    :param rightSellerJoints: 'joints19' of right seller
+    :param buyerJoints: 'joints19' of buyer of shape (keypoints, seqLength)
+    :param leftSellerJoints: 'joints19' of left seller of shape (keypoints, seqLength)
+    :param rightSellerJoints: 'joints19' of right seller of shape (keypoints, seqLength)
     :param fileName: fileName of the output animation
     :return: None
     """

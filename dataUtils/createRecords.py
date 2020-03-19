@@ -14,12 +14,14 @@ flags.DEFINE_string('train', '../train', 'Train record output directory')
 flags.DEFINE_string('test', '../test', 'Train record output directory')
 flags.DEFINE_integer('seqLength', 57, 'Sequence length')
 flags.DEFINE_integer('testFiles', 20, 'Number of pkl files used for testing')
+flags.DEFINE_integer('keypoints', 57, 'Number of keypoints in the skeleton')
+
 
 def split_into_features(sequence):
     """
     Mapper function to split sequence into features
-    :param sequence: Tensor of shape (seqLength, 3, 57, 1)
-    :return: Tuple of Tensors of shape (57,1)
+    :param sequence: Tensor of shape (seqLength, 3, keypoints, 1)
+    :return: Tuple of Tensors of shape (seqLength, keypoints)
     """
 
     # set sequence length
@@ -29,9 +31,9 @@ def split_into_features(sequence):
     buyerJoints, leftSellerJoints, rightSellerJoints = tf.split(sequence, 3, axis=1)
 
     # preserve order for proper visualization
-    buyerJoints = tf.transpose(tf.reshape(buyerJoints, (seqLength, 57)))
-    rightSellerJoints = tf.transpose(tf.reshape(rightSellerJoints, (seqLength, 57)))
-    leftSellerJoints = tf.transpose(tf.reshape(leftSellerJoints, (seqLength, 57)))
+    buyerJoints = tf.reshape(buyerJoints, (seqLength, FLAGS.keypoints))
+    rightSellerJoints = tf.reshape(rightSellerJoints, (seqLength, FLAGS.keypoints))
+    leftSellerJoints = tf.reshape(leftSellerJoints, (seqLength, FLAGS.keypoints))
     return (buyerJoints, rightSellerJoints, leftSellerJoints)
 
 def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints, seqLength):
