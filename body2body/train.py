@@ -194,7 +194,9 @@ def main(args):
     # set up summary writers
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     train_log_dir = os.path.join(os.path.join(logs, current_time),  'train')
+    profiler_log_dir = os.path.join(os.path.join(logs, 'func'),  current_time)
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+    profiler_summary_writer = tf.summary.create_file_writer(profiler_log_dir)
 
     # start training
     for epoch in range(epochs):
@@ -214,7 +216,16 @@ def main(args):
             target_seq = input_tensor[:, inp_length:]
 
             # do the train step
+            if (epoch == 0 and batch == 0):
+                tf.summary.trace_on(graph=True, profiler=False)
             batch_loss = train_step(input_seq, target_seq, encoder, decoder, optimizer)
+            if (epoch == 0 and batch == 0):
+                with profiler_summary_writer.as_default():
+                    tf.summary.trace_export(
+                        name="Execution Graph",
+                        step=0
+                    )
+
             epoch_loss += batch_loss
 
             # print progress periodically
@@ -225,6 +236,7 @@ def main(args):
                 # log the metrics
                 with train_summary_writer.as_default():
                     tf.summary.scalar('MSE',  data=batch_loss.numpy(), step=epoch)
+
 
         # save checkpoint
         if (epoch + 1) % save == 0:
