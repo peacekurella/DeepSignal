@@ -28,12 +28,16 @@ class Encoder(tf.keras.Model):
         # initialize number of layers
         self.num_layers = num_layers
 
-        # initialize GRU layer
-        self.GRU = tf.keras.layers.GRU(
-            self.enc_units,
-            return_sequences=True,
-            return_state=True
-        )
+        # initialize GRU layers
+        self.GRU = []
+        for _ in range(num_layers):
+            self.GRU.append(
+                tf.keras.layers.GRU(
+                    self.enc_units,
+                    return_sequences=True,
+                    return_state=True
+                )
+            )
 
         # initialize drop out layer
         self.Dropout = tf.keras.layers.Dropout(
@@ -46,10 +50,15 @@ class Encoder(tf.keras.Model):
             scale=False
         )
 
-        # initialize dense layer
-        self.Fc = tf.keras.layers.Dense(
-            self.enc_units
-        )
+        # initialize dense layers
+        self.Fc = []
+        for _ in range(num_layers):
+            self.Fc.append(
+                tf.keras.layers.Dense(
+                    enc_units,
+                    activation='relu'
+                )
+            )
 
     def call(self, x, hidden, train):
         """
@@ -64,15 +73,15 @@ class Encoder(tf.keras.Model):
         states = []
 
         # create initial state
-        initial_state = tf.reshape(hidden[0], (self.batch_size, self.enc_units))
+        initial_state = hidden[0]
 
         # add dropout and layerNorm
         x = self.layerNorm(x)
         x = self.Dropout(x)
 
         # pass through GRU
-        output, state = self.GRU(x, initial_state=initial_state)
-        states.append(tf.reshape(state, (1, self.batch_size, self.enc_units)))
+        output, state = self.GRU[0](x, initial_state=initial_state)
+        states.append(tf.expand_dims(state, axis=0))
 
         # add additional layers as required
         for i in range(self.num_layers - 1):
@@ -80,7 +89,7 @@ class Encoder(tf.keras.Model):
             initial_state = tf.reshape(hidden[i + 1], (self.batch_size, self.enc_units))
 
             # pass input through dense layer for the right shape
-            dense_x = self.Fc(x)
+            dense_x = self.Fc[i](x)
 
             # add a short circuit for gradient flow
             output = tf.add(output, dense_x)
@@ -90,8 +99,8 @@ class Encoder(tf.keras.Model):
             output = self.Dropout(output)
 
             # pass through GRU
-            output, state = self.GRU(output, initial_state=initial_state)
-            states.append(tf.reshape(state, (1, self.batch_size, self.enc_units)))
+            output, state = self.GRU[i+1](output, initial_state=initial_state)
+            states.append(tf.expand_dims(state, axis=0))
 
         # concatenate all hidden states
         state = tf.concat(states, axis=0)
@@ -101,12 +110,12 @@ class Encoder(tf.keras.Model):
 
         return output, state
 
-    def initialize_hidden_state(self):
+    def initialize_hidden_state(self, batch_size):
         """
         Returns a zero hidden state
         :return: a tensor of size (batch_size, enc_units)
         """
-        return tf.zeros((self.num_layers, self.batch_size, self.enc_units))
+        return tf.zeros((self.num_layers, batch_size, self.enc_units))
 
 
 class Attention(tf.keras.layers.Layer):
@@ -182,12 +191,22 @@ class Decoder(tf.keras.Model):
         # initialize output size
         self.output_size = output_size
 
-        # initialize GRU layer
-        self.GRU = tf.keras.layers.GRU(
-            self.dec_units,
-            return_sequences=True,
-            return_state=True,
-            recurrent_initializer='glorot_uniform'
+        # initialize GRU layers
+        self.GRU = []
+        for _ in range(num_layers):
+            self.GRU.append(
+                tf.keras.layers.GRU(
+                    self.dec_units,
+                    return_sequences=True,
+                    return_state=True
+                )
+            )
+
+        # initialize finGru
+        self.finGRU = tf.keras.layers.GRU(
+                self.dec_units,
+                return_sequences=True,
+                return_state=True
         )
 
         # initialize output dense layer
@@ -195,11 +214,16 @@ class Decoder(tf.keras.Model):
             output_size
         )
 
-        # initialize output dense layer
-        self.hidFc = tf.keras.layers.Dense(
-            dec_units,
-            activation='relu'
-        )
+        # initialize hidden state dense layers
+        self.hidFc = []
+        for _ in range(num_layers):
+            self.hidFc.append(
+                tf.keras.layers.Dense(
+                    dec_units,
+                    activation='relu'
+                )
+            )
+
         # initialize attention layer
         self.Attention = Attention(self.dec_units)
 
@@ -215,66 +239,64 @@ class Decoder(tf.keras.Model):
         )
 
         # initialize batchNorm
-        self.batchNorm = tf.keras.layers.BatchNormalization(
-            center=False,
-            scale=False
-        )
+        self.batchNorm = []
+        for _ in range(num_layers):
+            self.batchNorm.append(
+                tf.keras.layers.BatchNormalization(
+                    center=False,
+                    scale=False
+                )
+            )
 
     def call(self, prev_output, hidden, enc_output, train):
         """
         Defines forward pass operation
         :param prev_output: previous output tensor of shape (batch_size, input_shape)
         :param hidden: hidden state tensor of shape (num_layers, batch_size, enc_units)
-        :param enc_output: encoder output tensor of shape (batch_size, seqLength, enc_units)
+        :param enc_output: encoder output tensor of shape (batch_size, seqLengtf.reshape(hidden[0], (self.batch_size, self.dec_units))th, enc_units)
         :param train: boolean value indicating training mode operation
         :return: output, state, and attention_weight tensors of shapes
-                (batch_size, output_size), (batch_size, seqLength, enc_units), and (batch_size, seqLength, 1)
+                (batch_size, output_size), (num_layers, batch_size, dec_units), and (batch_size, seqLength, 1)
         """
+
+        states = []
 
         # get attention weights and context vector
         input_hidden = hidden[self.num_layers - 1]
         context_vector, attention_weights = self.Attention(input_hidden, enc_output)
 
-        # create initial state
-        if hidden[0].shape[1] == self.dec_units:
-            initial_state = tf.reshape(hidden[0], (self.batch_size, self.dec_units))
-        else:
-            initial_state = self.hidFc(hidden[0])
-
-        # add dropout
-        prev_output = self.Dropout(prev_output)
-
-        # reshape to pass through GRU
-        prev_output = tf.expand_dims(prev_output, axis=1)
-
-        # pass through GRU
-        prev_output, state = self.GRU(prev_output, initial_state=initial_state)
-
-        for i in range(self.num_layers - 1):
+        for i in range(self.num_layers):
 
             # create initial state
-            if hidden[i + 1].shape[1] == self.dec_units:
-                initial_state = tf.reshape(hidden[i + 1], (self.batch_size, self.dec_units))
+            if hidden[i].shape[1] == self.dec_units:
+                initial_state = hidden[i]
             else:
-                initial_state = self.hidFc(hidden[i + 1])
+                initial_state = self.hidFc[i](hidden[i])
 
             # add dropout and batchNorm
-            prev_output = self.batchNorm(prev_output)
+            prev_output = self.batchNorm[i](prev_output)
             prev_output = self.Dropout(prev_output)
 
+            # reshape for GRU input
+            prev_output = tf.expand_dims(prev_output, axis=1)
+
             # pass through GRU
-            prev_output, state = self.GRU(prev_output, initial_state=initial_state)
+            prev_output, state = self.GRU[i](prev_output, initial_state=initial_state)
+            prev_output = tf.squeeze(prev_output, axis=1)
+            states.append(tf.expand_dims(state, axis=0))
 
         # concatenate context vector with prev_output
+        prev_output = tf.expand_dims(prev_output, axis=1)
         prev_output = tf.concat([tf.expand_dims(context_vector, 1), prev_output], axis=-1)
 
         # pass through final GRU layer
-        output, state = self.GRU(prev_output)
+        output, state = self.finGRU(prev_output)
 
         # reshape output
         output = tf.reshape(output, (-1, output.shape[2]))
 
         # add a dense layer for output
         output = self.Fc(output)
+        state = tf.concat(states, axis=0)
 
         return output, state, attention_weights

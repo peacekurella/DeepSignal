@@ -9,7 +9,7 @@ from absl import flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('input', 'input', 'Input Directory')
-flags.DEFINE_string('output', 'output', 'Output Directory')
+flags.DEFINE_string('output', 'videos', 'Output Directory')
 
 def main(argv):
     """

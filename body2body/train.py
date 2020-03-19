@@ -5,12 +5,14 @@ import modelBuilder as model
 from absl import app
 from absl import flags
 import time
+import datetime
 
 # set up flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('input', '../train', 'Input Directory')
 flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
+flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
 
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
@@ -24,8 +26,9 @@ flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
 flags.DEFINE_integer('epochs', 1000, 'Number of training epochs')
 flags.DEFINE_integer('buffer', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
-flags.DEFINE_integer('save', 100, 'Checkpoint save epochs')
+flags.DEFINE_integer('save', 10, 'Checkpoint save epochs')
 flags.DEFINE_float('learning_rate', 0.0001, 'learning rate')
+
 
 
 def parse_example(example_proto):
@@ -59,7 +62,7 @@ def deserialize_example(example):
 
     return buyerJoints, leftSellerJoints, rightSellerJoints
 
-
+@tf.function
 def train_step(input_seq, target_seq, encoder, decoder, optimizer):
     """
     Defines a backward pass through the network
@@ -71,24 +74,27 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
     :return: batch loss for the given mini batch
     """
 
-    # initialize loss
+    # initialize loss and RMSE
     loss = 0
     time_steps = target_seq.shape[1]
 
     # initialize encoder hidden state
-    enc_hidden = encoder.initialize_hidden_state()
+    enc_hidden = encoder.initialize_hidden_state(FLAGS.batch_size)
 
     with tf.GradientTape() as tape:
         # pass through encoder
         enc_output, enc_hidden = encoder(input_seq, enc_hidden, True)
 
         # first input to decoder
-        dec_input = target_seq[:, 0]
+        buyer = input_seq[:, -1, :decoder.output_size]
+        sellers = target_seq[:, 0, decoder.output_size:]
+        dec_input = tf.concat([buyer, sellers], axis=1)
+        dec_hidden = enc_hidden
 
         # start teacher forcing the network
         for t in range(1, time_steps):
             # pass dec_input and target sequence to decoder
-            predictions, _, _ = decoder(dec_input, enc_hidden, enc_output, True)
+            predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, True)
 
             # calculate the loss for every time step
             losses = tf.keras.losses.MSE(target_seq[:, t, :decoder.output_size], predictions)
@@ -97,9 +103,11 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
             # set the next target value as input to decoder
             # purge the tensors from memory
             del predictions, dec_input
-            dec_input = target_seq[:, t]
+            buyer = target_seq[:, t-1, :decoder.output_size]
+            sellers = target_seq[:, t, decoder.output_size:]
+            dec_input = tf.concat([buyer, sellers], axis=1)
 
-    # calculate average batch loss for the whole sequence
+    # calculate average batch loss, RMSE for the whole sequence
     batch_loss = (loss / time_steps)
 
     # get trainable variables
@@ -117,24 +125,17 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
     return batch_loss
 
 
-def prepare_dataset():
+def prepare_dataset(input):
     """
     Prepares the dataset
     :return: dataset object with example of shape (batch_size, seqLength, input_size)
     """
-    if not (os.path.isdir(FLAGS.input)):
+    if not (os.path.isdir(input)):
         print("Invalid input directory")
         sys.exit()
 
-    if not (os.path.isdir(FLAGS.ckpt)):
-        try:
-            os.mkdir(FLAGS.ckpt)
-        except:
-            print("Error creating train directory")
-            sys.exit()
-
     # read the files
-    files = list(map(lambda x: os.path.join(FLAGS.input, x), os.listdir(FLAGS.input)))
+    files = list(map(lambda x: os.path.join(input, x), os.listdir(input)))
     dataset = tf.data.TFRecordDataset(files)
 
     # parse the examples
@@ -157,7 +158,8 @@ def main(args):
     """
 
     # prepare the dataset
-    dataset = prepare_dataset()
+    input = FLAGS.input
+    dataset = prepare_dataset(input)
 
     # set up experiment
     keypoints = FLAGS.keypoints
@@ -173,6 +175,7 @@ def main(args):
     inp_length = FLAGS.inp_length
     learning_rate = FLAGS.learning_rate
     save = FLAGS.save
+    logs = FLAGS.logs
 
     # create encoder, decoder, and optimizer
     encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
@@ -188,9 +191,10 @@ def main(args):
         decoder=decoder
     )
 
-    # commence training
-    progress = "Avg Epoch {} Loss {:.4f}".format(0, 0)
-    print(progress)
+    # set up summary writers
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    train_log_dir = os.path.join(os.path.join(logs, current_time),  'train')
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     # start training
     for epoch in range(epochs):
@@ -214,9 +218,13 @@ def main(args):
             epoch_loss += batch_loss
 
             # print progress periodically
+            # save logs for tensorboard
             if batch % 100 == 0:
-                progress = "\tEpoch {} Batch {} Loss {:.4f}".format(epoch + 1, batch, batch_loss.numpy())
+                progress = "Epoch {} Batch {} Loss {:.4f}".format(epoch + 1, batch, batch_loss.numpy())
                 print(progress)
+                # log the metrics
+                with train_summary_writer.as_default():
+                    tf.summary.scalar('MSE',  data=batch_loss.numpy(), step=epoch)
 
         # save checkpoint
         if (epoch + 1) % save == 0:
@@ -224,9 +232,9 @@ def main(args):
             checkpoint.save(ckpt_prefix)
 
         # print progress
-        progress = "Avg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / steps_per_epoch))
+        progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / steps_per_epoch))
         print(progress)
-        print("Epoch train time {}".format(time.time() - start))
+        print("\tEpoch train time {}".format(time.time() - start))
 
 
 if __name__ == '__main__':
