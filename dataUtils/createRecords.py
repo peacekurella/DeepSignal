@@ -13,7 +13,7 @@ flags.DEFINE_string('input', '../normalized', 'Input Directory')
 flags.DEFINE_string('train', '../train', 'Train record output directory')
 flags.DEFINE_string('test', '../test', 'Train record output directory')
 flags.DEFINE_integer('seqLength', 57, 'Sequence length')
-flags.DEFINE_integer('testFiles', 20, 'Number of pkl files used for testing')
+flags.DEFINE_integer('testFiles', 50, 'Number of pkl files used for testing')
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints in the skeleton')
 
 

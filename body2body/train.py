@@ -23,7 +23,7 @@ flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
 flags.DEFINE_float('dec_drop', 0.2, 'Decoder dropout probability')
 flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
 
-flags.DEFINE_integer('epochs', 1000, 'Number of training epochs')
+flags.DEFINE_integer('epochs', 100, 'Number of training epochs')
 flags.DEFINE_integer('buffer', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 10, 'Checkpoint save epochs')
@@ -218,13 +218,21 @@ def main(args):
             # do the train step
             if (epoch == 0 and batch == 0):
                 tf.summary.trace_on(graph=True, profiler=False)
+
+            # actual train step
             batch_loss = train_step(input_seq, target_seq, encoder, decoder, optimizer)
+
+            # log the trace
             if (epoch == 0 and batch == 0):
                 with profiler_summary_writer.as_default():
                     tf.summary.trace_export(
                         name="Execution Graph",
                         step=0
                     )
+
+            # log the loss
+            with train_summary_writer.as_default():
+                tf.summary.scalar('MSE', data=batch_loss.numpy(), step=epoch)
 
             epoch_loss += batch_loss
 
@@ -233,10 +241,6 @@ def main(args):
             if batch % 100 == 0:
                 progress = "Epoch {} Batch {} Loss {:.4f}".format(epoch + 1, batch, batch_loss.numpy())
                 print(progress)
-                # log the metrics
-                with train_summary_writer.as_default():
-                    tf.summary.scalar('MSE',  data=batch_loss.numpy(), step=epoch)
-
 
         # save checkpoint
         if (epoch + 1) % save == 0:

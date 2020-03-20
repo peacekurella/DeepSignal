@@ -5,7 +5,7 @@ python preprocessing.py
 rm -r ../input
 if [ $PREP = $"Y" ];then
   python normalize.py
-  python createRecords.py
+  python createRecords.py --train ../normalized/train  --test ../normalized/test
   rm -r ../normalized
   rm -r ../output
 else

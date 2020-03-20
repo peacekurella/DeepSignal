@@ -1,13 +1,20 @@
 import tensorflow as tf
 from absl import app
 from absl import flags
+import os
 import train
 import modelBuilder as model
+import numpy as np
+import sys
+sys.path.append('..')
+import dataUtils.dataVis as vis
 
 # set up flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('test_input', '../test', 'Input Directory')
+flags.DEFINE_string('test_output', '../inference', 'Input Directory')
+
 
 def run_inference(input_seq, target_seq, encoder, decoder):
     """
@@ -48,7 +55,7 @@ def run_inference(input_seq, target_seq, encoder, decoder):
         sellers = target_seq[:, t, decoder.output_size:]
         dec_input = tf.concat([buyer, sellers], axis=1)
 
-    return tf.concat(predictions, axis=1)
+    return tf.squeeze(tf.concat(predictions, axis=1), axis=0)
 
 
 def main(args):
@@ -72,6 +79,7 @@ def main(args):
     dec_drop = FLAGS.dec_drop
     batch_size = FLAGS.batch_size
     inp_length = FLAGS.inp_length
+    output = FLAGS.test_output
 
     # create encoder, decoder, and optimizer
     encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
@@ -84,13 +92,43 @@ def main(args):
     )
     checkpoint.restore(checkpoint_dir).expect_partial()
 
+    # metrics initialization
+    total_error = []
+    count = 0
+
     # run a test prediction
-    for (b, l, r) in dataset.take(1):
+    for (b, l, r) in dataset.take(5000):
+
+        # create a target animation
+        vis.create_animation(
+            tf.transpose(b[0, inp_length:]).numpy(),
+            tf.transpose(l[0, inp_length:]).numpy(),
+            tf.transpose(r[0, inp_length:]).numpy(),
+            os.path.join(output, 'batch_'+str(count)+'_input')
+        )
+
+        # run the inference op
         input = tf.expand_dims(tf.concat([b, l, r], axis=2)[0], axis=0)
         input_seq = input[:, :inp_length]
         target_seq = input[:, inp_length:]
         buyers = run_inference(input_seq, target_seq, encoder, decoder)
-        print(buyers)
+
+        # calculate the average joint error across all frames
+        total_errors = tf.keras.losses.MSE(b[:, inp_length:], buyers)
+        total_error.append( tf.reduce_mean(total_errors).numpy() / (keypoints * buyers.shape[0]))
+
+        # save the inference
+        vis.create_animation(
+            tf.transpose(buyers).numpy(),
+            tf.transpose(l[0, inp_length:]).numpy(),
+            tf.transpose(r[0, inp_length:]).numpy(),
+            os.path.join(output, 'batch_'+str(count)+'_output')
+        )
+        count += 1
+
+    # print the average error, std over all batches
+    print(np.mean(total_error))
+    print(np.std(total_error))
 
 
 if __name__ == '__main__':
