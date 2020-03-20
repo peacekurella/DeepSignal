@@ -1,6 +1,6 @@
 import pickle
 import os
-from dataVis import create_animation
+from dataUtils.dataVis import create_animation
 import sys
 from absl import app
 from absl import flags
@@ -9,7 +9,7 @@ from absl import flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('input', 'input', 'Input Directory')
-flags.DEFINE_string('output', 'output', 'Output Directory')
+flags.DEFINE_string('output', 'videos', 'Output Directory')
 
 def main(argv):
     """

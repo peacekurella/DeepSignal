@@ -1,4 +1,7 @@
-input
-output
 *.pyc
 *.TFrecord
+*.pkl
+*.mp4
+ckpt
+logs
+inference

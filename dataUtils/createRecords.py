@@ -4,19 +4,24 @@ import os
 from absl import app
 from absl import flags
 import sys
+import random
 
 # set up flags
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('input', 'normalized', 'Input Directory')
-flags.DEFINE_string('output', 'records', 'Output Directory')
+flags.DEFINE_string('input', '../normalized', 'Input Directory')
+flags.DEFINE_string('train', '../train', 'Train record output directory')
+flags.DEFINE_string('test', '../test', 'Train record output directory')
 flags.DEFINE_integer('seqLength', 57, 'Sequence length')
+flags.DEFINE_integer('testFiles', 50, 'Number of pkl files used for testing')
+flags.DEFINE_integer('keypoints', 57, 'Number of keypoints in the skeleton')
+
 
 def split_into_features(sequence):
     """
     Mapper function to split sequence into features
-    :param sequence: Tensor of shape (seqLength, 3, 57, 1)
-    :return: Tuple of Tensors of shape (57,1)
+    :param sequence: Tensor of shape (seqLength, 3, keypoints, 1)
+    :return: Tuple of Tensors of shape (seqLength, keypoints)
     """
 
     # set sequence length
@@ -26,9 +31,9 @@ def split_into_features(sequence):
     buyerJoints, leftSellerJoints, rightSellerJoints = tf.split(sequence, 3, axis=1)
 
     # preserve order for proper visualization
-    buyerJoints = tf.transpose(tf.reshape(buyerJoints, (seqLength, 57)))
-    rightSellerJoints = tf.transpose(tf.reshape(rightSellerJoints, (seqLength, 57)))
-    leftSellerJoints = tf.transpose(tf.reshape(leftSellerJoints, (seqLength, 57)))
+    buyerJoints = tf.reshape(buyerJoints, (seqLength, FLAGS.keypoints))
+    rightSellerJoints = tf.reshape(rightSellerJoints, (seqLength, FLAGS.keypoints))
+    leftSellerJoints = tf.reshape(leftSellerJoints, (seqLength, FLAGS.keypoints))
     return (buyerJoints, rightSellerJoints, leftSellerJoints)
 
 def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints, seqLength):
@@ -49,6 +54,7 @@ def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints, seqLength
     # create continuous sequences of seqLength
     dataset = tf.data.Dataset.from_tensor_slices(sequence)
     dataset = dataset.window(seqLength, 2, 1, True)
+
     # flatten dataset comin from window
     dataset = dataset.flat_map(lambda x: x)
     dataset = dataset.batch(seqLength, drop_remainder=True)
@@ -97,7 +103,8 @@ def tf_serialize_example(buyerJoints, leftSellerJoints, rightSellerJoints):
     :param rightSellerJoints: right seller joint sequence
     :return: Serialized features
     """
-    tf_string = tf.py_function(serialize_example, (buyerJoints, leftSellerJoints, rightSellerJoints), tf.string)
+    args = (buyerJoints, leftSellerJoints, rightSellerJoints)
+    tf_string = tf.py_function(serialize_example, args, tf.string)
     return tf.reshape(tf_string, ())
 
 def main(argv):
@@ -111,14 +118,25 @@ def main(argv):
         print("Invalid input directory")
         sys.exit()
 
-    if not (os.path.isdir(FLAGS.output)):
+    if not (os.path.isdir(FLAGS.train)):
         try:
-            os.mkdir(FLAGS.output)
+            os.mkdir(FLAGS.train)
         except:
-            print("Error creating output directory")
+            print("Error creating train directory")
             sys.exit()
 
-    for file in os.listdir(FLAGS.input):
+    if not (os.path.isdir(FLAGS.test)):
+        try:
+            os.mkdir(FLAGS.test)
+        except:
+            print("Error creating test directory")
+            sys.exit()
+
+    # randomly shuffle the files
+    files = os.listdir(FLAGS.input)
+    random.shuffle(files)
+
+    for count, file in enumerate(files):
 
         # load the data
         pkl = os.path.join(FLAGS.input, file)
@@ -150,7 +168,10 @@ def main(argv):
         record = dataset.map(tf_serialize_example)
 
         # write to TFrecord file
-        filename = os.path.join(FLAGS.output, file.split('.')[0]+'.TFrecord')
+        if(count < FLAGS.testFiles):
+            filename = os.path.join(FLAGS.test, file.split('.')[0]+'.TFrecord')
+        else:
+            filename = os.path.join(FLAGS.train, file.split('.')[0] + '.TFrecord')
         writer = tf.data.experimental.TFRecordWriter(filename)
         writer.write(record)
         print(filename)
