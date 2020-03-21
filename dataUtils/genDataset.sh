@@ -7,8 +7,8 @@ if [ $PREP = $"Y" ];then
   python normalize.py
   python createRecords.py --train ../normalized/train  --test ../normalized/test
   rm -r ../normalized
-  rm -r ../output
+  rm -r ../preprocessed
 else
-  python createRecords.py --input ../output
-  rm -r ../output
+  python createRecords.py --input ../preprocessed
+  rm -r ../preprocessed
 fi

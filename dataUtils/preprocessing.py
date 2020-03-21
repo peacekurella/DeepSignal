@@ -10,8 +10,7 @@ from absl import app
 # Set up flags
 FLAGS = flags.FLAGS
 flags.DEFINE_string("input", "../input", "Input pkl directory")
-flags.DEFINE_string("output", "../output", "Output Directory")
-
+flags.DEFINE_string("output", "../preprocessed", "Output Directory")
 
 
 def joint_positions(leftSellerJoints, rightSellerJoints, buyerJoints):
