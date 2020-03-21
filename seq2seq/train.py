@@ -6,6 +6,8 @@ from absl import app
 from absl import flags
 import time
 import datetime
+sys.path.append('..')
+import dataUtils.getData as db
 
 # set up flags
 FLAGS = flags.FLAGS
@@ -25,43 +27,11 @@ flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
 flags.DEFINE_boolean('auto', False, 'Enable Auto Regression')
 
 flags.DEFINE_integer('epochs', 60, 'Number of training epochs')
-flags.DEFINE_integer('buffer', 5000, 'shuffle buffer size')
+flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 10, 'Checkpoint save epochs')
 flags.DEFINE_float('learning_rate', 0.0001, 'learning rate')
 
-
-
-def parse_example(example_proto):
-    """
-    Parses examples from the record files
-    :param example_proto: input example proto_buffer string
-    :return: parsed example
-    """
-
-    # create a feature descriptor
-    feature_description = {
-        'br': tf.io.FixedLenFeature([], tf.string),
-        'ls': tf.io.FixedLenFeature([], tf.string),
-        'rs': tf.io.FixedLenFeature([], tf.string)
-    }
-
-    return tf.io.parse_single_example(example_proto, feature_description)
-
-
-def deserialize_example(example):
-    """
-    Deserializes the tensors in parsed examples
-    :param example: input example to be parsed
-    :return: (buyerJoints, leftSellerJoints, rightSellerJoints) tuple containing the sequences
-    """
-
-    # cast to float32 for better performance
-    buyerJoints = tf.cast(tf.io.parse_tensor(example['br'], out_type=tf.double), tf.float32)
-    leftSellerJoints = tf.cast(tf.io.parse_tensor(example['ls'], out_type=tf.double), tf.float32)
-    rightSellerJoints = tf.cast(tf.io.parse_tensor(example['rs'], out_type=tf.double), tf.float32)
-
-    return buyerJoints, leftSellerJoints, rightSellerJoints
 
 @tf.function
 def train_step(input_seq, target_seq, encoder, decoder, optimizer):
@@ -131,32 +101,6 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
 
     return batch_loss
 
-
-def prepare_dataset(input):
-    """
-    Prepares the dataset
-    :return: dataset object with example of shape (batch_size, seqLength, input_size)
-    """
-    if not (os.path.isdir(input)):
-        print("Invalid input directory")
-        sys.exit()
-
-    # read the files
-    files = list(map(lambda x: os.path.join(input, x), os.listdir(input)))
-    dataset = tf.data.TFRecordDataset(files)
-
-    # parse the examples
-    dataset = dataset.map(parse_example)
-
-    # deserialize the tensors
-    dataset = dataset.map(deserialize_example)
-
-    # shuffle and batch the data
-    dataset = dataset.shuffle(FLAGS.buffer).batch(FLAGS.batch_size, drop_remainder=True)
-
-    return dataset
-
-
 def main(args):
     """
     Trains the model and save the checkpoints
@@ -166,7 +110,9 @@ def main(args):
 
     # prepare the dataset
     input = FLAGS.input
-    dataset = prepare_dataset(input)
+    buffer_size = FLAGS.buffer_size
+    batch_size = FLAGS.batch_size
+    dataset = db.prepare_dataset(input, buffer_size, batch_size, True)
 
     # set up experiment
     keypoints = FLAGS.keypoints
@@ -184,8 +130,6 @@ def main(args):
     save = FLAGS.save
     logs = FLAGS.logs
     auto = FLAGS.auto
-
-    print(auto)
 
     # create encoder, decoder, and optimizer
     encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
