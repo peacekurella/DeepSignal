@@ -22,8 +22,9 @@ flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
 flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
 flags.DEFINE_float('dec_drop', 0.2, 'Decoder dropout probability')
 flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
+flags.DEFINE_boolean('auto', False, 'Enable Auto Regression')
 
-flags.DEFINE_integer('epochs', 100, 'Number of training epochs')
+flags.DEFINE_integer('epochs', 60, 'Number of training epochs')
 flags.DEFINE_integer('buffer', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 10, 'Checkpoint save epochs')
@@ -86,9 +87,12 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
         enc_output, enc_hidden = encoder(input_seq, enc_hidden, True)
 
         # first input to decoder
-        buyer = input_seq[:, -1, :decoder.output_size]
-        sellers = target_seq[:, 0, decoder.output_size:]
-        dec_input = tf.concat([buyer, sellers], axis=1)
+        if FLAGS.auto:
+            buyer = input_seq[:, -1, :decoder.output_size]
+            sellers = target_seq[:, 0, decoder.output_size:]
+            dec_input = tf.concat([buyer, sellers], axis=1)
+        else:
+            dec_input = target_seq[:, 0, decoder.output_size:]
         dec_hidden = enc_hidden
 
         # start teacher forcing the network
@@ -103,9 +107,12 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
             # set the next target value as input to decoder
             # purge the tensors from memory
             del predictions, dec_input
-            buyer = target_seq[:, t-1, :decoder.output_size]
-            sellers = target_seq[:, t, decoder.output_size:]
-            dec_input = tf.concat([buyer, sellers], axis=1)
+            if FLAGS.auto:
+                buyer = target_seq[:, t-1, :decoder.output_size]
+                sellers = target_seq[:, t, decoder.output_size:]
+                dec_input = tf.concat([buyer, sellers], axis=1)
+            else:
+                dec_input = target_seq[:, t, decoder.output_size:]
 
     # calculate average batch loss, RMSE for the whole sequence
     batch_loss = (loss / time_steps)
@@ -176,6 +183,9 @@ def main(args):
     learning_rate = FLAGS.learning_rate
     save = FLAGS.save
     logs = FLAGS.logs
+    auto = FLAGS.auto
+
+    print(auto)
 
     # create encoder, decoder, and optimizer
     encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
@@ -212,7 +222,10 @@ def main(args):
             input_tensor = tf.concat([b, l, r], axis=2)
 
             # split into input and target
-            input_seq = input_tensor[:, :inp_length]
+            if auto:
+                input_seq = input_tensor[:, :inp_length]
+            else:
+                input_seq = input_tensor[:, :inp_length, keypoints:]
             target_seq = input_tensor[:, inp_length:]
 
             # do the train step
