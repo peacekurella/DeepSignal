@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.axes3d as p3
 import matplotlib.animation as anim
 
-def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName):
+def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, inferedJoints, fileName):
     """
     Generates a video file of the subjects' motion
     :param buyerJoints: 'joints19' of buyer of shape (keypoints, seqLength)
@@ -89,7 +89,10 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName)
         y = buyerJoints[i + 1][0]
         z = buyerJoints[i + 2][0]
         jointList.append((x, y, z))
-        graph, = ax.plot([x], [y], [z], linestyle="", c='g', marker="o")
+        if inferedJoints is None:
+            graph, = ax.plot([x], [y], [z], linestyle="", c='g', marker="o")
+        else:
+            graph, = ax.plot([x], [y], [z], linestyle="", c='tab:gray', marker="o")
         buyerPoints.append(graph)
 
     buyerBones = []
@@ -97,8 +100,30 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName)
         xs = [jointList[start][0], jointList[end][0]]
         ys = [jointList[start][1], jointList[end][1]]
         zs = [jointList[start][2], jointList[end][2]]
-        graph, = ax.plot(xs, ys, zs, c='g')
+        if inferedJoints is None:
+            graph, = ax.plot(xs, ys, zs, c='g')
+        else:
+            graph, = ax.plot(xs, ys, zs, c='tab:gray')
         buyerBones.append(graph)
+
+    inferedPoints = []
+    inferedBones = []
+    if inferedJoints is not None:
+        jointList = []
+        for i in range(0, len(inferedJoints), 3):
+            x = inferedJoints[i][0]
+            y = inferedJoints[i + 1][0]
+            z = inferedJoints[i + 2][0]
+            jointList.append((x, y, z))
+            graph, = ax.plot([x], [y], [z], linestyle="", c='g', marker="o")
+            inferedPoints.append(graph)
+
+        for start, end in humanSkeleton:
+            xs = [jointList[start][0], jointList[end][0]]
+            ys = [jointList[start][1], jointList[end][1]]
+            zs = [jointList[start][2], jointList[end][2]]
+            graph, = ax.plot(xs, ys, zs, c='g')
+            inferedBones.append(graph)
 
     def update_plot(frame, joints, points, bones, humanSkeleton):
 
@@ -171,9 +196,39 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName)
             graph.set_data(xs, ys)
             graph.set_3d_properties(zs)
 
+        if inferedJoints is not None:
+            inferedjoints = joints[3]
+            inferedPoints = points[3]
+            inferedBones = bones[3]
+
+            jointList = []
+            for i in range(len(inferedPoints)):
+                graph = inferedPoints[i]
+                x = inferedjoints[3 * i][frame]
+                y = inferedjoints[3 * i + 1][frame]
+                z = inferedjoints[3 * i + 2][frame]
+                jointList.append((x, y, z))
+                graph.set_data([x], [y])
+                graph.set_3d_properties([z])
+
+            for i in range(len(inferedBones)):
+                graph = inferedBones[i]
+                start, end = humanSkeleton[i]
+                xs = [jointList[start][0], jointList[end][0]]
+                ys = [jointList[start][1], jointList[end][1]]
+                zs = [jointList[start][2], jointList[end][2]]
+                graph.set_data(xs, ys)
+                graph.set_3d_properties(zs)
+
     points = [leftSellerPoints, rightSellerPoints, buyerPoints]
     joints = [leftSellerJoints, rightSellerJoints, buyerJoints]
     bones = [leftSellerBones, rightSellerBones, buyerBones]
+
+    if inferedJoints is not None:
+        points.append(inferedPoints)
+        joints.append(inferedJoints)
+        bones.append(inferedBones)
+
     frames = len(leftSellerJoints[0])
 
     # create the animation
