@@ -138,6 +138,7 @@ def main(args):
                 tf.transpose(b[i, inp_length:]).numpy(),
                 tf.transpose(l[i, inp_length:]).numpy(),
                 tf.transpose(r[i, inp_length:]).numpy(),
+                None,
                 os.path.join(output, 'epoch_'+str(count)+'batch_'+str(i)+'_input')
             )
 
@@ -164,9 +165,10 @@ def main(args):
 
             # save the inference
             vis.create_animation(
-                tf.transpose(buyers).numpy(),
+                tf.transpose(b[i, inp_length:]).numpy(),
                 tf.transpose(l[i, inp_length:]).numpy(),
                 tf.transpose(r[i, inp_length:]).numpy(),
+                tf.transpose(buyers).numpy(),
                 os.path.join(output, 'epoch_'+str(count)+'batch_'+str(i)+'_output')
             )
             count += 1

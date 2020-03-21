@@ -15,7 +15,7 @@ from pathlib import Path
 FLAGS = flags.FLAGS
 
 # TODO change input dir to preprocessed 
-flags.DEFINE_string('input', '../output', 'Input Directory')
+flags.DEFINE_string('input', '../preprocessed', 'Input Directory')
 flags.DEFINE_string('output', '../normalized', 'Output Directory')
 
 
@@ -192,6 +192,8 @@ def normalize_pkl_files():
             if (subject['humanId'] == buyerId):
                 subject['joints19'] = buyerJoints
                 
+        create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, file)
+
         # Remove .pkl extension from name
         file = Path(str(file))
         file = str(file.with_suffix(''))
@@ -201,7 +203,7 @@ def normalize_pkl_files():
         print("Writing data from %s to file %s_norm.pkl" % (file, file))
         pickle.dump(new_pickle, outFile)
         outFile.close()
-
+        break
 
 def main(argv):
     """
