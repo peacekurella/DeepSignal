@@ -176,7 +176,15 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, fileName)
     bones = [leftSellerBones, rightSellerBones, buyerBones]
     frames = len(leftSellerJoints[0])
 
-    ani = anim.FuncAnimation(fig, update_plot, frames, fargs=(joints, points, bones, humanSkeleton), interval=50, repeat=True)
+    # create the animation
+    ani = anim.FuncAnimation(
+        fig,
+        update_plot,
+        frames,
+        fargs=(joints, points, bones, humanSkeleton),
+        interval=50,
+        repeat=True
+    )
 
     # save only if filename is passed
     if fileName:
