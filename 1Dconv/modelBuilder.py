@@ -32,8 +32,20 @@ class motionAutoEncoder(tf.keras.Model):
                 activation='relu',
                 padding="causal"
             ),
-            tf.keras.layers.Dropout(
-                dropout_rate
+            tf.keras.layers.BatchNormalization(
+                center=False,
+                scale=False
+            ),
+
+            tf.keras.layers.Conv1D(
+                256,
+                kernel_size=3,
+                activation='relu',
+                padding="causal"
+            ),
+            tf.keras.layers.BatchNormalization(
+                center=False,
+                scale=False
             ),
             tf.keras.layers.Conv1D(
                 256,
@@ -41,17 +53,9 @@ class motionAutoEncoder(tf.keras.Model):
                 activation='relu',
                 padding="causal"
             ),
-            tf.keras.layers.Dropout(
-                dropout_rate
-            ),
-            tf.keras.layers.Conv1D(
-                256,
-                kernel_size=3,
-                activation='relu',
-                padding="causal"
-            ),
-            tf.keras.layers.Dropout(
-                dropout_rate
+            tf.keras.layers.BatchNormalization(
+                center=False,
+                scale=False
             ),
             tf.keras.layers.MaxPool1D(
                  pool_size=2,
@@ -82,6 +86,3 @@ class motionAutoEncoder(tf.keras.Model):
         decoder_output = self.Decoder(encoder_output, training=training)
 
         return decoder_output[:, :, 0, :]
-
-
-
