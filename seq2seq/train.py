@@ -24,6 +24,8 @@ flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
 flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
 flags.DEFINE_float('dec_drop', 0.2, 'Decoder dropout probability')
 flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
+flags.DEFINE_integer('pen_length', 7, 'penalty length')
+flags.DEFINE_float('pen_smoothing', 5, 'Penalty smoothing coefficent')
 flags.DEFINE_boolean('auto', False, 'Enable Auto Regression')
 
 flags.DEFINE_integer('epochs', 60, 'Number of training epochs')
@@ -32,6 +34,20 @@ flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 10, 'Checkpoint save epochs')
 flags.DEFINE_float('learning_rate', 0.0001, 'learning rate')
 
+def mean_collapse_loss(sequence, number_of_steps):
+    """
+    Add a smoothed penalty for no motion
+    :param sequence: a list of predictions
+    :param number_of_steps: The number of steps to consider for penalty
+    :return: The penalty for mean collapse
+    """
+    loss = 0
+
+    # add the velocities
+    for i in range(number_of_steps-1):
+        loss += tf.reduce_sum(sequence[i+1] - sequence[i])
+
+    return 1.0/loss
 
 @tf.function
 def train_step(input_seq, target_seq, encoder, decoder, optimizer):
@@ -45,9 +61,10 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
     :return: batch loss for the given mini batch
     """
 
-    # initialize loss and RMSE
+    # initialize loss
     loss = 0
     time_steps = target_seq.shape[1]
+    predictions = []
 
     # initialize encoder hidden state
     enc_hidden = encoder.initialize_hidden_state(FLAGS.batch_size)
@@ -58,9 +75,9 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
 
         # first input to decoder
         if FLAGS.auto:
-            buyer = input_seq[:, -1, :decoder.output_size]
-            sellers = target_seq[:, 0, decoder.output_size:]
-            dec_input = tf.concat([buyer, sellers], axis=1)
+            ls = input_seq[:, -1, :decoder.output_size]
+            brs = target_seq[:, 0, decoder.output_size:]
+            dec_input = tf.concat([ls, brs], axis=1)
         else:
             dec_input = target_seq[:, 0, decoder.output_size:]
         dec_hidden = enc_hidden
@@ -68,21 +85,24 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
         # start teacher forcing the network
         for t in range(1, time_steps):
             # pass dec_input and target sequence to decoder
-            predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, True)
+            prediction, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, True)
+            predictions.append(prediction)
 
             # calculate the loss for every time step
-            losses = tf.keras.losses.MSE(target_seq[:, t, :decoder.output_size], predictions)
+            losses = tf.keras.losses.MSE(target_seq[:, t, :decoder.output_size], prediction)
             loss += tf.reduce_mean(losses)
 
             # set the next target value as input to decoder
             # purge the tensors from memory
-            del predictions, dec_input
+            del dec_input
             if FLAGS.auto:
-                buyer = target_seq[:, t-1, :decoder.output_size]
-                sellers = target_seq[:, t, decoder.output_size:]
-                dec_input = tf.concat([buyer, sellers], axis=1)
+                ls = target_seq[:, t-1, :decoder.output_size]
+                brs = target_seq[:, t, decoder.output_size:]
+                dec_input = tf.concat([ls, brs], axis=1)
             else:
                 dec_input = target_seq[:, t, decoder.output_size:]
+
+        loss = loss + (FLAGS.pen_smoothing * mean_collapse_loss(predictions, FLAGS.pen_length))
 
     # calculate average batch loss, RMSE for the whole sequence
     batch_loss = (loss / time_steps)
@@ -163,7 +183,7 @@ def main(args):
         for (batch, (b, l, r)) in enumerate(dataset.shuffle(batch_size).take(steps_per_epoch)):
 
             # concatenate all three vectors
-            input_tensor = tf.concat([b, l, r], axis=2)
+            input_tensor = tf.concat([l, b, r], axis=2)
 
             # split into input and target
             if auto:

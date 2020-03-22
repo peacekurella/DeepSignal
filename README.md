@@ -12,7 +12,7 @@ Enter Y on the prompt to enable data normalization, N to skip it. Place
 After execution of bash script run body2body/train.py to start training the model. 
 The following command to access all command line arguments
 ```buildoutcfg
-> python body2body/train.py --help
+> python seq2seq/train.py --help
 ```
 
 To view the tensorboard 
@@ -22,5 +22,5 @@ To view the tensorboard
 
 To run the inference. The following command to access all command line arguments
 ```buildoutcfg
-> python body2body/test.py --help
+> python seq2seq/test.py --help
 ```

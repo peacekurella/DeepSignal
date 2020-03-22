@@ -12,3 +12,5 @@ else
   python createRecords.py --input ../preprocessed
   rm -r ../preprocessed
 fi
+mkdir ../inference
+mkdir ../convOut

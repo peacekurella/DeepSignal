@@ -143,7 +143,7 @@ def main(args):
             )
 
             # concatenate all three vectors
-            input_tensor = tf.expand_dims(tf.concat([b, l, r], axis=2)[i], axis=0)
+            input_tensor = tf.expand_dims(tf.concat([l, b, r], axis=2)[i], axis=0)
 
             # split into input and target
             if auto:
@@ -153,14 +153,14 @@ def main(args):
             target_seq = input_tensor[:, inp_length:]
 
             # run the inference op
-            buyers = run_inference(input_seq, target_seq, encoder, decoder)
+            ls = run_inference(input_seq, target_seq, encoder, decoder)
 
             # calculate the average joint error across all frames
-            total_errors = tf.keras.losses.MSE(b[:, inp_length:], buyers)
+            total_errors = tf.keras.losses.MSE(l[:, inp_length:], ls)
             total_errors = tf.reduce_mean(total_errors).numpy()
 
             # append for calculating metrics
-            total_error.append( total_errors / (keypoints * buyers.shape[0]))
+            total_error.append( total_errors / (keypoints * l.shape[0]))
             seqWise.update({'epoch_'+str(count)+'batch_'+str(i)+'_input': total_errors})
 
             # save the inference
@@ -168,7 +168,7 @@ def main(args):
                 tf.transpose(b[i, inp_length:]).numpy(),
                 tf.transpose(l[i, inp_length:]).numpy(),
                 tf.transpose(r[i, inp_length:]).numpy(),
-                tf.transpose(buyers).numpy(),
+                tf.transpose(ls).numpy(),
                 os.path.join(output, 'epoch_'+str(count)+'batch_'+str(i)+'_output')
             )
             count += 1

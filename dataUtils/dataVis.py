@@ -92,7 +92,7 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, inferedJo
         if inferedJoints is None:
             graph, = ax.plot([x], [y], [z], linestyle="", c='g', marker="o")
         else:
-            graph, = ax.plot([x], [y], [z], linestyle="", c='tab:gray', marker="o")
+            graph, = ax.plot([x], [y], [z], linestyle="", c='g', marker="o")
         buyerPoints.append(graph)
 
     buyerBones = []
@@ -103,7 +103,7 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, inferedJo
         if inferedJoints is None:
             graph, = ax.plot(xs, ys, zs, c='g')
         else:
-            graph, = ax.plot(xs, ys, zs, c='tab:gray')
+            graph, = ax.plot(xs, ys, zs, c='g')
         buyerBones.append(graph)
 
     inferedPoints = []
@@ -115,14 +115,14 @@ def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, inferedJo
             y = inferedJoints[i + 1][0]
             z = inferedJoints[i + 2][0]
             jointList.append((x, y, z))
-            graph, = ax.plot([x], [y], [z], linestyle="", c='g', marker="o")
+            graph, = ax.plot([x], [y], [z], linestyle="", c='y', marker="o")
             inferedPoints.append(graph)
 
         for start, end in humanSkeleton:
             xs = [jointList[start][0], jointList[end][0]]
             ys = [jointList[start][1], jointList[end][1]]
             zs = [jointList[start][2], jointList[end][2]]
-            graph, = ax.plot(xs, ys, zs, c='g')
+            graph, = ax.plot(xs, ys, zs, c='y')
             inferedBones.append(graph)
 
     def update_plot(frame, joints, points, bones, humanSkeleton):
