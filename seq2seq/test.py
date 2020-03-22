@@ -2,20 +2,34 @@ import tensorflow as tf
 from absl import app
 from absl import flags
 import os
-import train
 import modelBuilder as model
 import numpy as np
 import sys
 sys.path.append('..')
 import dataUtils.dataVis as vis
+import dataUtils.getData as db
 import csv
 
 # set up flags
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('test_input', '../test', 'Input Directory')
-flags.DEFINE_string('test_output', '../inference', 'Input Directory')
+flags.DEFINE_string('input', '../test', 'Input Directory')
+flags.DEFINE_string('output', '../inference', 'Input Directory')
+flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
 
+flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
+flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
+flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
+flags.DEFINE_integer('enc_layers', 1, 'Number of layers in encoder')
+flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
+flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
+flags.DEFINE_float('dec_drop', 0.2, 'Decoder dropout probability')
+flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
+flags.DEFINE_boolean('auto', False, 'Enable Auto Regression')
+
+flags.DEFINE_integer('epochs', 60, 'Number of training epochs')
+flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
+flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 
 def run_inference(input_seq, target_seq, encoder, decoder):
     """
@@ -24,7 +38,7 @@ def run_inference(input_seq, target_seq, encoder, decoder):
     :param target_seq: target sequence
     :param encoder: encoder object
     :param decoder: decoder object
-    :return:
+    :return: predictions tensor of shape (batch_size, seqLength, input_size)
     """
 
     # number of time steps the
@@ -73,7 +87,11 @@ def main(args):
     """
 
     # prep the input for inference
-    dataset = train.prepare_dataset(FLAGS.test_input)
+    # prepare the dataset
+    input = FLAGS.input
+    buffer_size = FLAGS.buffer_size
+    batch_size = FLAGS.batch_size
+    dataset = db.prepare_dataset(input, buffer_size, batch_size, False)
     checkpoint_dir = tf.train.latest_checkpoint(FLAGS.ckpt)
 
     # set up experiment
@@ -86,7 +104,7 @@ def main(args):
     dec_drop = FLAGS.dec_drop
     batch_size = FLAGS.batch_size
     inp_length = FLAGS.inp_length
-    output = FLAGS.test_output
+    output = FLAGS.output
     auto = FLAGS.auto
 
     # create encoder, decoder, and optimizer
@@ -125,7 +143,7 @@ def main(args):
             )
 
             # concatenate all three vectors
-            input_tensor = tf.expand_dims(tf.concat([b, l, r], axis=2)[i], axis=0)
+            input_tensor = tf.expand_dims(tf.concat([l, b, r], axis=2)[i], axis=0)
 
             # split into input and target
             if auto:
@@ -135,14 +153,14 @@ def main(args):
             target_seq = input_tensor[:, inp_length:]
 
             # run the inference op
-            buyers = run_inference(input_seq, target_seq, encoder, decoder)
+            ls = run_inference(input_seq, target_seq, encoder, decoder)
 
             # calculate the average joint error across all frames
-            total_errors = tf.keras.losses.MSE(b[:, inp_length:], buyers)
+            total_errors = tf.keras.losses.MSE(l[:, inp_length:], ls)
             total_errors = tf.reduce_mean(total_errors).numpy()
 
             # append for calculating metrics
-            total_error.append( total_errors / (keypoints * buyers.shape[0]))
+            total_error.append( total_errors / (keypoints * l.shape[0]))
             seqWise.update({'epoch_'+str(count)+'batch_'+str(i)+'_input': total_errors})
 
             # save the inference
@@ -150,7 +168,7 @@ def main(args):
                 tf.transpose(b[i, inp_length:]).numpy(),
                 tf.transpose(l[i, inp_length:]).numpy(),
                 tf.transpose(r[i, inp_length:]).numpy(),
-                tf.transpose(buyers).numpy(),
+                tf.transpose(ls).numpy(),
                 os.path.join(output, 'epoch_'+str(count)+'batch_'+str(i)+'_output')
             )
             count += 1
