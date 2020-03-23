@@ -36,7 +36,6 @@ class motionAutoEncoder(tf.keras.Model):
                 center=False,
                 scale=False
             ),
-
             tf.keras.layers.Conv1D(
                 256,
                 kernel_size=3,
@@ -73,8 +72,7 @@ class motionAutoEncoder(tf.keras.Model):
                 keypoints,
                 kernel_size=(1,25),
                 strides=2,
-                data_format='channels_last',
-                activation='relu'
+                data_format='channels_last'
             )
 
         ])

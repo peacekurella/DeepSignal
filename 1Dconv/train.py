@@ -18,17 +18,15 @@ flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
 flags.DEFINE_integer('epochs', 1000, 'Number of training epochs')
 flags.DEFINE_float('dropout', 0.25, 'dropout probability')
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
-flags.DEFINE_float('learning_rate', 0.001, 'learning rate')
+flags.DEFINE_float('learning_rate', 0.01, 'learning rate')
 flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 100, 'Checkpoint save epochs')
 flags.DEFINE_integer('seqLength', 56, 'sequence to be passed for predictions')
+flags.DEFINE_boolean("load_ckpt", False, 'Resume training from loaded checkpoint')
 
 @tf.function
 def train_step(input, target, model, optimizer):
-    # initialize loss
-    loss = 0
-    predictions = []
 
     # calculate the loss
     with tf.GradientTape() as tape:
@@ -68,6 +66,7 @@ def main(args):
     epochs = FLAGS.epochs
     save = FLAGS.save
     seqLength = FLAGS.seqLength
+    load_ckpt = FLAGS.load_ckpt
 
     # set up the model
     model = modelBuilder.motionAutoEncoder(dropout_rate, keypoints)
@@ -80,8 +79,14 @@ def main(args):
     # create checkpoint saver
     checkpoint = tf.train.Checkpoint(
         optimizer=optimizer,
-        model = model
+        model=model
     )
+
+    # load checkpoint if needed
+    if load_ckpt:
+        checkpoint.restore(
+            tf.train.latest_checkpoint(FLAGS.ckpt)
+        )
 
     # set up summary writers
     train_log_dir = os.path.join(os.path.join(logs, 'conv1d'),  'train')
