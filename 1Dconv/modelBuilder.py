@@ -80,7 +80,6 @@ class motionAutoEncoder(tf.keras.Model):
         encoder_output = self.Encoder(inputs, training=training)
         encoder_output = tf.expand_dims(encoder_output, axis=-1)
         decoder_output = self.Decoder(encoder_output, training=training)
-
         return decoder_output[:, :, 0, :]
 
 

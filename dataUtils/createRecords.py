@@ -28,13 +28,13 @@ def split_into_features(sequence):
     seqLength = sequence.shape[0]
 
     # split into features
-    buyerJoints, leftSellerJoints, rightSellerJoints = tf.split(sequence, 3, axis=1)
+    buyerJoints, rightSellerJoints, leftSellerJoints = tf.split(sequence, 3, axis=1)
 
     # preserve order for proper visualization
     buyerJoints = tf.reshape(buyerJoints, (seqLength, FLAGS.keypoints))
     rightSellerJoints = tf.reshape(rightSellerJoints, (seqLength, FLAGS.keypoints))
     leftSellerJoints = tf.reshape(leftSellerJoints, (seqLength, FLAGS.keypoints))
-    return (buyerJoints, rightSellerJoints, leftSellerJoints)
+    return buyerJoints, rightSellerJoints, leftSellerJoints
 
 def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints, seqLength):
     """

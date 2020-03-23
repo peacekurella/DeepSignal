@@ -2,6 +2,7 @@
 *.TFrecord
 *.pkl
 *.mp4
+*.csv
 ckpt
 logs
 inference
