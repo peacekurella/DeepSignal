@@ -122,15 +122,14 @@ def get_segments(bones):
                 problemFrames.append(f)
                 break
     print("%d faulty frames" % (len(problemFrames)))
-    # print("Bone mean of the lengths: ", np.mean(frameBones, axis=0))
-    # print("Bone standard deviation of the lengths: ", np.std(frameBones, axis=0))
 
     # Define partitions for writing out files as the start and end frames numbers of whole segments.
     segments = []
     for target in range(0, len(problemFrames) - 1):
-        # If there"s a sequence of frames longer than 100 frames, add to the accepted segments.
+        # If a sequence is more than 100 frames, add the trimmed version to those accepted.
         if problemFrames[target + 1] - problemFrames[target] > 100:
-            segments.append((problemFrames[target], problemFrames[target + 1]))
+            # Start with the next 'good' frame and end 100 frames before the next 'bad' one
+            segments.append((problemFrames[target]+1, problemFrames[target + 1]-100))
 
     return segments
 
