@@ -8,7 +8,6 @@ from dataUtils import getData as db
 import dataUtils.dataVis as vis
 import os
 import numpy as np
-import csv
 
 # set up flags
 FLAGS = flags.FLAGS
@@ -82,7 +81,7 @@ def main(args):
     total_error = []
 
     # run a test prediction
-    for (b, l, r) in dataset.take(5000):
+    for (b, l, r) in dataset.take(steps_per_epoch):
 
         # input and target sequences
         input = tf.concat([b[:, :seqLength, :], r[:, :seqLength, :]], axis=2)

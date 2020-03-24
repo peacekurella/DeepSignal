@@ -108,6 +108,7 @@ def main(args):
     seqLength = FLAGS.seqLength
     load_ckpt = FLAGS.load_ckpt
     train_pe = FLAGS.train_pe
+    count_ckpt = 0
 
     # set up the model
     poseEncoder = modelBuilder.poseEncoder(dropout_rate)
@@ -158,7 +159,7 @@ def main(args):
 
                 # log the loss
                 with train_summary_writer.as_default():
-                    tf.summary.scalar('poseAE_MSE', data=batch_loss.numpy(), step=epoch)
+                    tf.summary.scalar('Reconstruction_error', data=batch_loss.numpy(), step=epoch)
 
                 epoch_loss += batch_loss
 
@@ -167,7 +168,7 @@ def main(args):
 
                 # log the loss
                 with train_summary_writer.as_default():
-                    tf.summary.scalar('poseAE_MSE', data=batch_loss.numpy(), step=epoch)
+                    tf.summary.scalar('Reconstruction_Error', data=batch_loss.numpy(), step=epoch)
 
                 epoch_loss += batch_loss
 
@@ -176,7 +177,7 @@ def main(args):
 
                 # log the loss
                 with train_summary_writer.as_default():
-                    tf.summary.scalar('poseAE_MSE', data=batch_loss.numpy(), step=epoch)
+                    tf.summary.scalar('Reconstruction_Error', data=batch_loss.numpy(), step=epoch)
 
                 epoch_loss += batch_loss
 
@@ -188,8 +189,9 @@ def main(args):
 
             # save checkpoint
             if (epoch + 1) % save == 0:
-                ckpt_prefix = os.path.join(FLAGS.ckpt, "ckpt")
+                ckpt_prefix = os.path.join(FLAGS.ckpt, "ckpt{}".format(count_ckpt))
                 checkpoint.save(ckpt_prefix)
+                count_ckpt += 1
 
             # print progress
             progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / (steps_per_epoch * 3)))
@@ -215,7 +217,7 @@ def main(args):
 
             # log the loss
             with train_summary_writer.as_default():
-                tf.summary.scalar('motionEncoder_MSE', data=batch_loss.numpy(), step=epoch)
+                tf.summary.scalar('MSE', data=batch_loss.numpy(), step=epoch)
 
             epoch_loss += batch_loss
 
@@ -227,8 +229,9 @@ def main(args):
 
         # save checkpoint
         if (epoch + 1) % save == 0:
-            ckpt_prefix = os.path.join(FLAGS.ckpt, "ckpt")
+            ckpt_prefix = os.path.join(FLAGS.ckpt, "ckpt{}".format(count_ckpt))
             checkpoint.save(ckpt_prefix)
+            count_ckpt += 1
 
         # print progress
         progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / steps_per_epoch))
