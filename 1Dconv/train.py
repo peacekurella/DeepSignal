@@ -24,28 +24,68 @@ flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 100, 'Checkpoint save epochs')
 flags.DEFINE_integer('seqLength', 56, 'sequence to be passed for predictions')
 flags.DEFINE_boolean("load_ckpt", False, 'Resume training from loaded checkpoint')
+flags.DEFINE_boolean("train_pe", True, 'Train the pose encoder')
+
 
 @tf.function
-def train_step(input, target, model, optimizer):
+def train_step_pe(input, poseEncoder, motionDecoder, optimizer):
+
+    # initialize loss
+    loss = 0
 
     # calculate the loss
     with tf.GradientTape() as tape:
-
-        predictions = model(input, training=True)
-        loss = tf.keras.losses.MSE(target, predictions)
+        encoder_out = poseEncoder(input, training=True)
+        predictions = motionDecoder(encoder_out, training=True)
+        loss = tf.keras.losses.MSE(input, predictions)
         loss = tf.reduce_mean(loss)
 
     # get trainable variables
-    variables = model.trainable_variables
+    variables = poseEncoder.trainable_variables + motionDecoder.trainable_variables
 
     # get the gradients
     gradients = tape.gradient(loss, variables)
 
-    # purge tape from memory
-    del tape
+    # purge from memory
+    del tape, predictions, encoder_out
 
     # apply gradients to variables
     optimizer.apply_gradients(zip(gradients, variables))
+
+    # purge from memory
+    optimizer, gradients, variables
+
+    return loss
+
+
+@tf.function
+def train_step(input, target, motionEncoder, motionDecoder, optimizer):
+
+    # initialize loss
+    loss = 0
+
+    # calculate the loss
+    with tf.GradientTape() as tape:
+
+        encoder_out = motionEncoder(input, training=True)
+        predictions = motionDecoder(encoder_out, training=True)
+        loss = tf.keras.losses.MSE(target, predictions)
+        loss = tf.reduce_mean(loss)
+
+    # get trainable variables
+    variables = motionEncoder.trainable_variables
+
+    # get the gradients
+    gradients = tape.gradient(loss, variables)
+
+    # purge from memory
+    del tape, predictions, encoder_out
+
+    # apply gradients to variables
+    optimizer.apply_gradients(zip(gradients, variables))
+
+    # purge from memory
+    optimizer, gradients, variables
 
     return loss
 
@@ -67,9 +107,12 @@ def main(args):
     save = FLAGS.save
     seqLength = FLAGS.seqLength
     load_ckpt = FLAGS.load_ckpt
+    train_pe = FLAGS.train_pe
 
     # set up the model
-    model = modelBuilder.motionAutoEncoder(dropout_rate, keypoints)
+    poseEncoder = modelBuilder.poseEncoder(dropout_rate)
+    motionEncoder = modelBuilder.motionEncoder(dropout_rate)
+    motionDecoder = modelBuilder.motionDecoder(keypoints)
 
     # set up optimizer
     optimizer = tf.keras.optimizers.Adam(
@@ -79,7 +122,9 @@ def main(args):
     # create checkpoint saver
     checkpoint = tf.train.Checkpoint(
         optimizer=optimizer,
-        model=model
+        poseEncoder = poseEncoder,
+        motionEncoder = motionEncoder,
+        motionDecoder = motionDecoder
     )
 
     # load checkpoint if needed
@@ -90,11 +135,68 @@ def main(args):
 
     # set up summary writers
     train_log_dir = os.path.join(os.path.join(logs, 'conv1d'),  'train')
-    profiler_log_dir = os.path.join(os.path.join(logs, 'conv1d'),  'func')
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-    profiler_summary_writer = tf.summary.create_file_writer(profiler_log_dir)
 
-    # start training
+    if train_pe:
+        # start training the pose auto encoder
+        for epoch in range(epochs):
+
+            # measure start time
+            start = time.time()
+            epoch_loss = 0
+
+            # do the actual training
+            for (batch, (b, l, r)) in enumerate(dataset.shuffle(batch_size).take(steps_per_epoch)):
+
+                # slice to sequence length
+                b = b[:, :seqLength, :]
+                l = l[:, :seqLength, :]
+                r = r[:, :seqLength, :]
+
+                # train with buyer body
+                batch_loss = train_step_pe(b, poseEncoder, motionDecoder, optimizer)
+
+                # log the loss
+                with train_summary_writer.as_default():
+                    tf.summary.scalar('poseAE_MSE', data=batch_loss.numpy(), step=epoch)
+
+                epoch_loss += batch_loss
+
+                # train with left seller body
+                batch_loss = train_step_pe(l, poseEncoder, motionDecoder, optimizer)
+
+                # log the loss
+                with train_summary_writer.as_default():
+                    tf.summary.scalar('poseAE_MSE', data=batch_loss.numpy(), step=epoch)
+
+                epoch_loss += batch_loss
+
+                # train with right seller body
+                batch_loss = train_step_pe(r, poseEncoder, motionDecoder, optimizer)
+
+                # log the loss
+                with train_summary_writer.as_default():
+                    tf.summary.scalar('poseAE_MSE', data=batch_loss.numpy(), step=epoch)
+
+                epoch_loss += batch_loss
+
+                # print progress periodically
+                # save logs for tensorboard
+                if batch % 100 == 0:
+                    progress = "Epoch {} Batch {} Loss {:.4f}".format(epoch + 1, batch, batch_loss.numpy() / 3)
+                    print(progress)
+
+            # save checkpoint
+            if (epoch + 1) % save == 0:
+                ckpt_prefix = os.path.join(FLAGS.ckpt, "ckpt")
+                checkpoint.save(ckpt_prefix)
+
+            # print progress
+            progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / (steps_per_epoch * 3)))
+            print(progress)
+            print("\tEpoch train time {}".format(time.time() - start))
+
+    # start training the motion encoder
     for epoch in range(epochs):
 
         # measure start time
@@ -108,24 +210,12 @@ def main(args):
             input = tf.concat([b[:, :seqLength, :], r[:, :seqLength, :]], axis=2)
             target = l[:, :seqLength, :]
 
-            # do the train step
-            if (epoch == 0 and batch == 0):
-                tf.summary.trace_on(graph=True, profiler=False)
-
             # actual train step
-            batch_loss = train_step(input, target, model, optimizer)
-
-            # log the trace
-            if (epoch == 0 and batch == 0):
-                with profiler_summary_writer.as_default():
-                    tf.summary.trace_export(
-                        name="Execution Graph",
-                        step=0
-                    )
+            batch_loss = train_step(input, target, motionEncoder, motionDecoder, optimizer)
 
             # log the loss
             with train_summary_writer.as_default():
-                tf.summary.scalar('MSE', data=batch_loss.numpy(), step=epoch)
+                tf.summary.scalar('motionEncoder_MSE', data=batch_loss.numpy(), step=epoch)
 
             epoch_loss += batch_loss
 

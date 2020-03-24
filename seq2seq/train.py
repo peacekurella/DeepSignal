@@ -24,7 +24,7 @@ flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
 flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
 flags.DEFINE_float('dec_drop', 0.2, 'Decoder dropout probability')
 flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
-flags.DEFINE_integer('pen_length', 7, 'penalty length')
+flags.DEFINE_integer('pen_length', 30, 'penalty length')
 flags.DEFINE_float('pen_smoothing', 5, 'Penalty smoothing coefficent')
 flags.DEFINE_boolean('auto', False, 'Enable Auto Regression')
 

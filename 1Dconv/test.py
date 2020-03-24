@@ -28,14 +28,16 @@ flags.DEFINE_integer('seqLength', 56, 'sequence to be passed for predictions')
 
 
 
-def run_inference(input, model):
+def run_inference(input, motionEncoder, motionDecoder):
     """
     Returns the predictions
     :param input: input frames to the model
-    :param model: 1D conv model
+    :param motionEncoder: 1D conv motion Encoder
+    :param motionDecoder: 1D conv motion Decoder
     :return: output frames from the model
     """
-    predictions = model(input, training=False)
+    encoder_out = motionEncoder(input, training=False)
+    predictions = motionDecoder(encoder_out, training=False)
     return predictions
 
 def main(args):
@@ -60,11 +62,13 @@ def main(args):
     output = FLAGS.output
 
     # set up the model
-    model = modelBuilder.motionAutoEncoder(dropout_rate, keypoints)
+    motionEncoder = modelBuilder.motionEncoder(dropout_rate)
+    motionDecoder = modelBuilder.motionDecoder(keypoints)
 
     # create checkpoint saver
     checkpoint = tf.train.Checkpoint(
-        model=model
+        motionDecoder = motionDecoder,
+        motionEncoder = motionEncoder
     )
 
     # restore checkpoints
@@ -85,7 +89,7 @@ def main(args):
         target = l[:, :seqLength, :]
 
         # run the inference op
-        ls = run_inference(input, model)
+        ls = run_inference(input, motionEncoder, motionDecoder)
         print(ls.shape)
 
         # calculate the average joint error across all frames
