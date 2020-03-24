@@ -15,16 +15,16 @@ flags.DEFINE_string('input', '../train', 'Input Directory')
 flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
 flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
 
-flags.DEFINE_integer('epochs', 1000, 'Number of training epochs')
+flags.DEFINE_integer('epochs', 200, 'Number of training epochs')
 flags.DEFINE_float('dropout', 0.25, 'dropout probability')
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_float('learning_rate', 0.01, 'learning rate')
 flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 100, 'Checkpoint save epochs')
-flags.DEFINE_integer('seqLength', 56, 'sequence to be passed for predictions')
+flags.DEFINE_integer('seqLength', 116, 'sequence to be passed for predictions')
 flags.DEFINE_boolean("load_ckpt", False, 'Resume training from loaded checkpoint')
-flags.DEFINE_boolean("train_pe", True, 'Train the pose encoder')
+flags.DEFINE_boolean("train_pe", False, 'Train the pose encoder')
 
 
 @tf.function
@@ -53,7 +53,7 @@ def train_step_pe(input, poseEncoder, motionDecoder, optimizer):
     optimizer.apply_gradients(zip(gradients, variables))
 
     # purge from memory
-    optimizer, gradients, variables
+    del optimizer, gradients, variables
 
     return loss
 
@@ -109,6 +109,7 @@ def main(args):
     load_ckpt = FLAGS.load_ckpt
     train_pe = FLAGS.train_pe
     count_ckpt = 0
+    print(train_pe)
 
     # set up the model
     poseEncoder = modelBuilder.poseEncoder(dropout_rate)
@@ -139,6 +140,7 @@ def main(args):
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     if train_pe:
+        print("Training PE")
         # start training the pose auto encoder
         for epoch in range(epochs):
 
@@ -150,18 +152,7 @@ def main(args):
             for (batch, (b, l, r)) in enumerate(dataset.shuffle(batch_size).take(steps_per_epoch)):
 
                 # slice to sequence length
-                b = b[:, :seqLength, :]
                 l = l[:, :seqLength, :]
-                r = r[:, :seqLength, :]
-
-                # train with buyer body
-                batch_loss = train_step_pe(b, poseEncoder, motionDecoder, optimizer)
-
-                # log the loss
-                with train_summary_writer.as_default():
-                    tf.summary.scalar('Reconstruction_error', data=batch_loss.numpy(), step=epoch)
-
-                epoch_loss += batch_loss
 
                 # train with left seller body
                 batch_loss = train_step_pe(l, poseEncoder, motionDecoder, optimizer)
@@ -172,19 +163,10 @@ def main(args):
 
                 epoch_loss += batch_loss
 
-                # train with right seller body
-                batch_loss = train_step_pe(r, poseEncoder, motionDecoder, optimizer)
-
-                # log the loss
-                with train_summary_writer.as_default():
-                    tf.summary.scalar('Reconstruction_Error', data=batch_loss.numpy(), step=epoch)
-
-                epoch_loss += batch_loss
-
                 # print progress periodically
                 # save logs for tensorboard
                 if batch % 100 == 0:
-                    progress = "Epoch {} Batch {} Loss {:.4f}".format(epoch + 1, batch, batch_loss.numpy() / 3)
+                    progress = "Epoch {} Batch {} Loss {:.4f}".format(epoch + 1, batch, batch_loss.numpy())
                     print(progress)
 
             # save checkpoint
@@ -194,7 +176,7 @@ def main(args):
                 count_ckpt += 1
 
             # print progress
-            progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / (steps_per_epoch * 3)))
+            progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / steps_per_epoch))
             print(progress)
             print("\tEpoch train time {}".format(time.time() - start))
 

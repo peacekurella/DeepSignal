@@ -133,9 +133,6 @@ class motionEncoder(tf.keras.Model):
             tf.keras.layers.MaxPool1D(
                 pool_size=2,
                 strides=2
-            ),
-            tf.keras.layers.Dropout(
-                dropout_rate
             )
         ])
 
