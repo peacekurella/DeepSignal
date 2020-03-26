@@ -8,6 +8,8 @@ import time
 import datetime
 sys.path.append('..')
 import dataUtils.getData as db
+import dataUtils.getTrajectory as traj
+import numpy as np
 
 # set up flags
 FLAGS = flags.FLAGS
@@ -15,6 +17,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('input', '../train', 'Input Directory')
 flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
 flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
+flags.DEFINE_boolean('load_ckpt', False, "Resume training")
 
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
@@ -23,8 +26,8 @@ flags.DEFINE_integer('enc_layers', 1, 'Number of layers in encoder')
 flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
 flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
 flags.DEFINE_float('dec_drop', 0.2, 'Decoder dropout probability')
-flags.DEFINE_integer('inp_length', 17, 'Input Sequence length')
-flags.DEFINE_integer('pen_length', 30, 'penalty length')
+flags.DEFINE_integer('inp_length', 16, 'Input Sequence length')
+flags.DEFINE_integer('pen_length', 0, 'penalty length')
 flags.DEFINE_float('pen_smoothing', 5, 'Penalty smoothing coefficent')
 flags.DEFINE_boolean('auto', False, 'Enable Auto Regression')
 
@@ -34,26 +37,13 @@ flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 flags.DEFINE_integer('save', 10, 'Checkpoint save epochs')
 flags.DEFINE_float('learning_rate', 0.0001, 'learning rate')
 
-def mean_collapse_loss(sequence, number_of_steps):
-    """
-    Add a smoothed penalty for no motion
-    :param sequence: a list of predictions
-    :param number_of_steps: The number of steps to consider for penalty
-    :return: The penalty for mean collapse
-    """
-    loss = 0
-
-    # add the velocities
-    for i in range(number_of_steps-1):
-        loss += tf.reduce_sum(sequence[i+1] - sequence[i])
-
-    return 1.0/loss
 
 @tf.function
-def train_step(input_seq, target_seq, encoder, decoder, optimizer):
+def train_step(encoder_input_seq, decoder_input_seq, target_seq, encoder, decoder, optimizer):
     """
     Defines a backward pass through the network
-    :param input_seq: input sequence to the encoder of shape (batch_size, time_steps, input_dim)
+    :param encoder_input_seq: input sequence to the encoder of shape (batch_size, inp_length, 2*input_dim)
+    :param encoder_input_seq: input sequence to the decoder of shape (batch_size, time_steps, 2*input_dim)
     :param target_seq: target sequence to the decoder of shape (batch_size, time_steps, input_dim)
     :param encoder: Encoder object
     :param decoder: Decoder object
@@ -70,41 +60,45 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
     enc_hidden = encoder.initialize_hidden_state(FLAGS.batch_size)
 
     with tf.GradientTape() as tape:
+
         # pass through encoder
-        enc_output, enc_hidden = encoder(input_seq, enc_hidden, True)
+        enc_output, enc_hidden = encoder(encoder_input_seq, enc_hidden, True)
 
         # first input to decoder
         if FLAGS.auto:
-            ls = input_seq[:, -1, :decoder.output_size]
-            brs = target_seq[:, 0, decoder.output_size:]
+            # concatenate the last time step of encoder input
+            ls = encoder_input_seq[:, -1, :FLAGS.keypoints]
+            brs = decoder_input_seq[:, 0]
             dec_input = tf.concat([ls, brs], axis=1)
         else:
-            dec_input = target_seq[:, 0, decoder.output_size:]
+            dec_input = decoder_input_seq[:, 0]
+
+        # input the hidden state
         dec_hidden = enc_hidden
 
         # start teacher forcing the network
         for t in range(1, time_steps):
+
             # pass dec_input and target sequence to decoder
             prediction, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, True)
             predictions.append(prediction)
 
             # calculate the loss for every time step
-            losses = tf.keras.losses.MSE(target_seq[:, t, :decoder.output_size], prediction)
+            losses = tf.keras.losses.MSE(target_seq[:, t], prediction)
             loss += tf.reduce_mean(losses)
 
-            # set the next target value as input to decoder
             # purge the tensors from memory
             del dec_input
+
+            # set the next target value as input to decoder
             if FLAGS.auto:
-                ls = target_seq[:, t-1, :decoder.output_size]
-                brs = target_seq[:, t, decoder.output_size:]
+                ls = target_seq[:, t-1]
+                brs = decoder_input_seq[:, t]
                 dec_input = tf.concat([ls, brs], axis=1)
             else:
-                dec_input = target_seq[:, t, decoder.output_size:]
+                dec_input = decoder_input_seq[:, t]
 
-        loss = loss + (FLAGS.pen_smoothing * mean_collapse_loss(predictions, FLAGS.pen_length))
-
-    # calculate average batch loss, RMSE for the whole sequence
+    # calculate average batch loss
     batch_loss = (loss / time_steps)
 
     # get trainable variables
@@ -120,6 +114,7 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
     optimizer.apply_gradients(zip(gradients, variables))
 
     return batch_loss
+
 
 def main(args):
     """
@@ -165,12 +160,16 @@ def main(args):
         decoder=decoder
     )
 
+    # load checkpoint if needed
+    if FLAGS.load_ckpt:
+        checkpoint.restore(
+            tf.train.latest_checkpoint(FLAGS.ckpt)
+        )
+
     # set up summary writers
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     train_log_dir = os.path.join(os.path.join(logs, current_time),  'train')
-    profiler_log_dir = os.path.join(os.path.join(logs, 'func'),  current_time)
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-    profiler_summary_writer = tf.summary.create_file_writer(profiler_log_dir)
 
     # start training
     for epoch in range(epochs):
@@ -187,30 +186,17 @@ def main(args):
 
             # split into input and target
             if auto:
-                input_seq = input_tensor[:, :inp_length]
+                encoder_input_seq = input_tensor[:, :inp_length]
             else:
-                input_seq = input_tensor[:, :inp_length, keypoints:]
-            target_seq = input_tensor[:, inp_length:]
+                encoder_input_seq = input_tensor[:, :inp_length, keypoints:]
 
-            # do the train step
-            if (epoch == 0 and batch == 0):
-                tf.summary.trace_on(graph=True, profiler=False)
+            #  create decoder input and target sequence
+            decoder_input_seq = input_tensor[:, inp_length:, keypoints:]
+            target_seq = input_tensor[:, inp_length:, :keypoints]
+
 
             # actual train step
-            batch_loss = train_step(input_seq, target_seq, encoder, decoder, optimizer)
-
-            # log the trace
-            if (epoch == 0 and batch == 0):
-                with profiler_summary_writer.as_default():
-                    tf.summary.trace_export(
-                        name="Execution Graph",
-                        step=0
-                    )
-
-            # log the loss
-            with train_summary_writer.as_default():
-                tf.summary.scalar('MSE', data=batch_loss.numpy(), step=epoch)
-
+            batch_loss = train_step(encoder_input_seq, decoder_input_seq, target_seq, encoder, decoder, optimizer)
             epoch_loss += batch_loss
 
             # print progress periodically
@@ -223,6 +209,10 @@ def main(args):
         if (epoch + 1) % save == 0:
             ckpt_prefix = os.path.join(FLAGS.ckpt, "ckpt")
             checkpoint.save(ckpt_prefix)
+
+        # log the loss
+        with train_summary_writer.as_default():
+            tf.summary.scalar('MSE', data=batch_loss.numpy(), step=epoch)
 
         # print progress
         progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_loss / steps_per_epoch))

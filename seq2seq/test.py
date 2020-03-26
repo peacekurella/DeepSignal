@@ -61,11 +61,12 @@ def run_inference(input_seq, target_seq, encoder, decoder):
 
     # list of predictions
     predictions = []
+    predictions.append(target_seq[:, 0, :decoder.output_size])
 
     for t in range(0, time_steps):
         # get the predictions
         prediction, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, False)
-        predictions.append(tf.expand_dims(prediction, axis=1))
+        predictions.append(prediction+predictions[t-1])
 
         # update inputs to decoder
         del dec_input
@@ -76,7 +77,7 @@ def run_inference(input_seq, target_seq, encoder, decoder):
         else:
             dec_input = target_seq[:, t, decoder.output_size:]
 
-    return tf.squeeze(tf.concat(predictions, axis=1), axis=0)
+    return tf.concat(predictions, axis=0)
 
 
 def main(args):
@@ -133,14 +134,6 @@ def main(args):
     for (b, l, r) in dataset.take(5000):
 
         for i in range(b.shape[0]):
-            # create a target animation
-            vis.create_animation(
-                tf.transpose(b[i, inp_length:]).numpy(),
-                tf.transpose(l[i, inp_length:]).numpy(),
-                tf.transpose(r[i, inp_length:]).numpy(),
-                None,
-                os.path.join(output, 'epoch_'+str(count)+'batch_'+str(i)+'_input')
-            )
 
             # concatenate all three vectors
             input_tensor = tf.expand_dims(tf.concat([l, b, r], axis=2)[i], axis=0)
@@ -150,13 +143,19 @@ def main(args):
                 input_seq = input_tensor[:, :inp_length]
             else:
                 input_seq = input_tensor[:, :inp_length, keypoints:]
-            target_seq = input_tensor[:, inp_length:]
+
+            # convert to relative trajectories
+            target_seq = input_tensor[:, inp_length+1:input_tensor.shape[1]-1]
+            target_seq = target_seq - input_tensor[:, inp_length+2:input_tensor.shape[1]]
+            start_pos = tf.expand_dims(input_tensor[:, inp_length], axis = 1)
+            target_seq = tf.concat([start_pos, target_seq], axis=1)
+
 
             # run the inference op
             ls = run_inference(input_seq, target_seq, encoder, decoder)
 
             # calculate the average joint error across all frames
-            total_errors = tf.keras.losses.MSE(l[:, inp_length:], ls)
+            total_errors = tf.keras.losses.MSE(l[i, inp_length:], ls)
             total_errors = tf.reduce_mean(total_errors).numpy()
 
             # append for calculating metrics
