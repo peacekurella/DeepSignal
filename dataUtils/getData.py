@@ -13,8 +13,12 @@ def parse_example(example_proto):
     # create a feature descriptor
     feature_description = {
         'br': tf.io.FixedLenFeature([], tf.string),
+        'b_start': tf.io.FixedLenFeature([], tf.string),
         'ls': tf.io.FixedLenFeature([], tf.string),
-        'rs': tf.io.FixedLenFeature([], tf.string)
+        'l_start': tf.io.FixedLenFeature([], tf.string),
+        'rs': tf.io.FixedLenFeature([], tf.string),
+        'r_start': tf.io.FixedLenFeature([], tf.string),
+
     }
 
     return tf.io.parse_single_example(example_proto, feature_description)
@@ -32,7 +36,13 @@ def deserialize_example(example):
     leftSellerJoints = tf.cast(tf.io.parse_tensor(example['ls'], out_type=tf.double), tf.float32)
     rightSellerJoints = tf.cast(tf.io.parse_tensor(example['rs'], out_type=tf.double), tf.float32)
 
-    return buyerJoints, leftSellerJoints, rightSellerJoints
+
+    # cast to float32 for better performance
+    b_start = tf.cast(tf.io.parse_tensor(example['b_start'], out_type=tf.double), tf.float32)
+    l_start = tf.cast(tf.io.parse_tensor(example['l_start'], out_type=tf.double), tf.float32)
+    r_start = tf.cast(tf.io.parse_tensor(example['r_start'], out_type=tf.double), tf.float32)
+
+    return (b_start, buyerJoints), (l_start, leftSellerJoints), (r_start, rightSellerJoints)
 
 def prepare_dataset(input, buffer_size, batch_size, drop_remainder):
     """

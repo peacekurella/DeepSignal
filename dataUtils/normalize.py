@@ -1,12 +1,8 @@
 import copy
-import matplotlib.pyplot as plt
-import matplotlib.animation as anim
-import mpl_toolkits.mplot3d.axes3d as p3
 import numpy as np
 import os
 import pickle
 import sys
-import tensorflow as tf
 from absl import app
 from absl import flags
 from pathlib import Path
@@ -126,6 +122,7 @@ def normalize_pkl_files():
     '''
     min_x, min_y, min_z, max_x, max_y, max_z = get_global_min_max()
     for file in os.listdir(FLAGS.input):
+
         pkl = os.path.join(FLAGS.input, file)
         pkl = open(pkl, 'rb')
         group = pickle.load(pkl)
@@ -191,8 +188,6 @@ def normalize_pkl_files():
                 subject['joints19'] = rightSellerJoints
             if (subject['humanId'] == buyerId):
                 subject['joints19'] = buyerJoints
-                
-        create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, file)
 
         # Remove .pkl extension from name
         file = Path(str(file))
@@ -203,7 +198,7 @@ def normalize_pkl_files():
         print("Writing data from %s to file %s_norm.pkl" % (file, file))
         pickle.dump(new_pickle, outFile)
         outFile.close()
-        break
+
 
 def main(argv):
     """
