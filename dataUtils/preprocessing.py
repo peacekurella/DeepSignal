@@ -11,6 +11,9 @@ from absl import app
 FLAGS = flags.FLAGS
 flags.DEFINE_string("input", "../input", "Input pkl directory")
 flags.DEFINE_string("output", "../preprocessed", "Output Directory")
+flags.DEFINE_integer("subsample", 0, "How many frames to skip")
+flags.DEFINE_integer("supersample", 0, "How many frames to linearly interpolate betewen recorded data")
+flags.DEFINE_integer("min_length", 50, "How many frames are required to consider a video clip long enough to use")
 
 
 def joint_positions(leftSellerJoints, rightSellerJoints, buyerJoints):
@@ -68,40 +71,69 @@ def bone_lengths(lSJoints, rSJoints, bJoints, humanSkeleton):
     :return: A list of length triples, representing the lengths of each person"s bones. Example format is:
     Frame k: [leftBone1, rightBone1, buyerBone1, leftBone2, rightBone2, buyerBone2, leftBone3, ...]
     """
-
     # Determine the positions of each person"s joints
     leftSellerFrameJoints, rightSellerFrameJoints, buyerFrameJoints = joint_positions(lSJoints, rSJoints, bJoints)
 
     # Calculate the length of each person"s bones
     frameBones = []
-    for f in range(0, len(leftSellerFrameJoints)):
+    for frame in range(0, len(leftSellerFrameJoints)):
         # Record length of each person"s bones within each frame
         # Keep the lengths in a flatter array to avoid timing issues later.
         boneLengths = []
-        for i in range(0, len(humanSkeleton)):
-            start, end = humanSkeleton[i]
+        for bone in range(0, len(humanSkeleton)):
+            start, end = humanSkeleton[bone]
 
             # Calculate lengths for left seller
-            xs = leftSellerFrameJoints[f][start][0] - leftSellerFrameJoints[f][end][0]
-            ys = leftSellerFrameJoints[f][start][1] - leftSellerFrameJoints[f][end][1]
-            zs = leftSellerFrameJoints[f][start][2] - leftSellerFrameJoints[f][end][2]
+            xs = leftSellerFrameJoints[frame][start][0] - leftSellerFrameJoints[frame][end][0]
+            ys = leftSellerFrameJoints[frame][start][1] - leftSellerFrameJoints[frame][end][1]
+            zs = leftSellerFrameJoints[frame][start][2] - leftSellerFrameJoints[frame][end][2]
             boneLengths.append(math.sqrt(xs ** 2 + ys ** 2 + zs ** 2))
 
             # Calculate lengths for right seller
-            xs = rightSellerFrameJoints[f][start][0] - rightSellerFrameJoints[f][end][0]
-            ys = rightSellerFrameJoints[f][start][1] - rightSellerFrameJoints[f][end][1]
-            zs = rightSellerFrameJoints[f][start][2] - rightSellerFrameJoints[f][end][2]
+            xs = rightSellerFrameJoints[frame][start][0] - rightSellerFrameJoints[frame][end][0]
+            ys = rightSellerFrameJoints[frame][start][1] - rightSellerFrameJoints[frame][end][1]
+            zs = rightSellerFrameJoints[frame][start][2] - rightSellerFrameJoints[frame][end][2]
             boneLengths.append(math.sqrt(xs ** 2 + ys ** 2 + zs ** 2))
 
             # Calculate lengths for buyer
-            xs = buyerFrameJoints[f][start][0] - buyerFrameJoints[f][end][0]
-            ys = buyerFrameJoints[f][start][1] - buyerFrameJoints[f][end][1]
-            zs = buyerFrameJoints[f][start][2] - buyerFrameJoints[f][end][2]
+            xs = buyerFrameJoints[frame][start][0] - buyerFrameJoints[frame][end][0]
+            ys = buyerFrameJoints[frame][start][1] - buyerFrameJoints[frame][end][1]
+            zs = buyerFrameJoints[frame][start][2] - buyerFrameJoints[frame][end][2]
             boneLengths.append(math.sqrt(xs ** 2 + ys ** 2 + zs ** 2))
 
         frameBones.append(boneLengths)
 
     return frameBones
+
+
+def velocities(leftSellerJoints, rightSellerJoints, buyerJoints):
+    """
+    Determine changes in position for each subject's joints in the video
+    :param leftSellerJoints: The left seller's "joints19" data from the pickle files
+    :param rightSellerJoints: The right seller's "joints19" data from the pickle files
+    :param buyerJoints: The buyer's "joints19" data from the pickle files
+    :return: The change in position for each joint from frame i to i + 1, as a
+    triple of x-y-z deltas in the form of:
+    Frame f: [lS(joint1(dx, dy, dz), ..., joint19(dx, dy, dz)),
+    rS(joint1(dx, dy, dz), ..., joint19(dx, dy, dz),
+    b(joint1(dx, dy, dz), ..., joint19(dx, dy, dz))]
+    """
+    # Partition position data into left, right, and buyer framewise joints
+    # Use np array format for easy array arithmetic
+    leftSellerFrameJoints, rightSellerFrameJoints, buyerFrameJoints = np.array(joint_positions(leftSellerJoints,
+                                                                                               rightSellerJoints,
+                                                                                               buyerJoints))
+
+    # Calculate the changes in each subject's joint positions throughout the video, then append to the master array
+    total = []
+    for frame in range(1, leftSellerJoints.shape[1]):
+        d_leftSeller = leftSellerFrameJoints[frame] - leftSellerFrameJoints[frame - 1]
+        d_rightSeller = rightSellerFrameJoints[frame] - rightSellerFrameJoints[frame - 1]
+        d_buyer = buyerFrameJoints[frame] - buyerFrameJoints[frame - 1]
+        total.append((d_leftSeller, d_rightSeller, d_buyer))
+
+    total = np.array(total)
+    return total
 
 
 def get_segments(bones):
@@ -114,33 +146,76 @@ def get_segments(bones):
     # If not, add the frame to a list of bad frames for later use
     problemFrames = []
     frameBones = np.array(bones)  # Convert to numpy array find distribution stats easier
+
+    # Current method uses mean and standard deviations for the error tolerances
     means = np.mean(frameBones, axis=0)
-    tolerance = np.std(frameBones, axis=0) * 3
-    for f in range(0, len(frameBones)):
-        for i in range(0, len(frameBones[f])):
-            if frameBones[f][i] < means[i] - tolerance[i] or frameBones[f][i] > means[i] + tolerance[i]:
-                problemFrames.append(f)
+    tolerance = np.std(frameBones, axis=0) * 5
+
+    # Alternative method: Use percentiles as thresholds
+    # upper_percent = np.percentile(frameBones, 99, axis=0)
+    # lower_percent = np.percentile(frameBones, 1, axis=0)
+
+    for frame in range(0, len(frameBones)):
+        for joint in range(0, len(frameBones[frame])):
+            lower = means[joint] - tolerance[joint]
+            upper = means[joint] + tolerance[joint]
+            # upper = upper_percent[joint]
+            # lower = lower_percent[joint]
+            if np.any(lower > frameBones[frame][joint]) or np.any(upper < frameBones[frame][joint]):
+                problemFrames.append(frame)
                 break
-    print("%d faulty frames" % (len(problemFrames)))
 
     # Define partitions for writing out files as the start and end frames numbers of whole segments.
     segments = []
-    for target in range(0, len(problemFrames) - 1):
-        # If a sequence is more than 100 frames, add the trimmed version to those accepted.
-        if problemFrames[target + 1] - problemFrames[target] > 100:
-            # Start with the next 'good' frame and end 100 frames before the next 'bad' one
-            segments.append((problemFrames[target]+1, problemFrames[target + 1]-100))
+    for target in range(len(problemFrames) - 1):
+        # If a sequence is more than the desired length, add the trimmed version to those accepted.
+        if problemFrames[target + 1] - problemFrames[target] > FLAGS.min_length:
+            segments.append((problemFrames[target]+1, problemFrames[target + 1]))
+
+    # If no problem frames found, write all of the video's data out
+    if len(problemFrames) == 0:
+        segments.append((0, len(frameBones) - 1))
 
     return segments
 
 
-def preprocess_frames(inp, output):
+def super_sampling(inp, k):
+    """
+    Returns a linearly interpolated supersample of the original sequence
+    :param inp: Input sequence of positions
+    :param k: Number of interpolated frames, should be an integer >= 1
+    :return: The newly generated sequence of (k + 1) * n frames
+    """
+    out = []
+    for frame in range(1, len(inp)):
+        diff = inp[frame] - inp[frame - 1]   # Find the average change in position between frames
+        for step in range(int(k)):
+            out.append(step / k * diff + inp[frame - 1])
+    return np.array(out)
+
+
+def sub_sampling(inp, k):
+    """
+    Returns a subsample which skips every kth frame of the original sequence
+    :param inp: Input sequence of posiitons as a numpy array
+    :param k: Number of frames to be skipped at each step
+    :return: The newly generated sequence of n / k frames
+    """
+    out = []
+    for frame in range(0, inp.shape[0], k):
+        out.append(inp[frame])
+    return np.array(out)
+
+
+def preprocess_frames(inp, output, subsample, supersample):
     """
     Given some "raw" video data as a pickle file, produces some number of files containing the frame data for
     exactly one acceptable segment of video. Number of files produced depends upon the quality and quantity of the
     original"s video data.
     :param inp: "Raw" pickle file"s path
     :param output: Path of the directory where the new pickle file(s) will be stored
+    :param subsample: How many frames to skip within an input sequence
+    :param supersample: How many frames to interpolate within an input sequence
     :return: None
     """
 
@@ -185,45 +260,56 @@ def preprocess_frames(inp, output):
         [10, 11]
     ]
 
-    # Calculate each person"s bone lengths within each frame
-    frameBones = bone_lengths(leftSellerJoints, rightSellerJoints, buyerJoints, humanSkeleton)
+    # Calculate the relevant data for each frame, either bone length or velocities
+    # frameBones = bone_lengths(leftSellerJoints, rightSellerJoints, buyerJoints, humanSkeleton)
+    framePoses = velocities(leftSellerJoints, rightSellerJoints, buyerJoints)
+
+    # Determine if super- or subsampling the data is necessary from user input
+    if supersample >= 1:
+        framePoses = super_sampling(framePoses, supersample)
+    if subsample >= 1:
+        framePoses = sub_sampling(framePoses, subsample)
 
     # Use the bone length data to filter out outliers and excessively noisy data
-    segments = get_segments(frameBones)
+    segments = get_segments(framePoses)
 
     # Create a new copy of the data, to be reused for each data segment
     new_pickle = copy.deepcopy(group)
 
     # Write new pickle files, each one containing data for exactly one good segment of video
-    fileCount = 0
+    partCount = 0
     for seg in segments:
-
         # Record data for each subject in the video
-        for i in range(0, len(group["subjects"])):
+        for subject in range(0, len(group["subjects"])):
             # Reset sizes of the 2d numpy arrays in the new pickle dictionary
-            new_subject = new_pickle["subjects"][i]
-            new_subject["bodyNormal"] = np.zeros((3, seg[1] - seg[0]))
-            new_subject["faceNormal"] = np.zeros((3, seg[1] - seg[0]))
-            new_subject["scores"] = np.zeros((19, seg[1] - seg[0]))
+            new_subject = new_pickle["subjects"][subject]
             new_subject["joints19"] = np.zeros((57, seg[1] - seg[0]))
-            old_subject = group["subjects"][i]
+
+            # NOTE: Currently we discard the bodyNormal, faceNormal, and scores data. This section is deprecated
+            # new_subject["bodyNormal"] = np.zeros((3, seg[1] - seg[0]))
+            # new_subject["faceNormal"] = np.zeros((3, seg[1] - seg[0]))
+            # new_subject["scores"] = np.zeros((19, seg[1] - seg[0]))
+            # for j in range(0, 3):
+            #     new_subject["bodyNormal"][j] = old_subject["bodyNormal"][j][seg[0]:seg[1]]
+            #     new_subject["faceNormal"][j] = old_subject["faceNormal"][j][seg[0]:seg[1]]
+            # for j in range(0, 19):
+            #     new_subject["scores"][j] = old_subject["scores"][j][seg[0]:seg[1]]
 
             # Use trimmed segments from original data for all frame-dependent information
-            for j in range(0, 3):
-                new_subject["bodyNormal"][j] = old_subject["bodyNormal"][j][seg[0]:seg[1]]
-                new_subject["faceNormal"][j] = old_subject["faceNormal"][j][seg[0]:seg[1]]
-            for j in range(0, 19):
-                new_subject["scores"][j] = old_subject["scores"][j][seg[0]:seg[1]]
-            for j in range(0, 57):
-                new_subject["joints19"][j] = old_subject["joints19"][j][seg[0]:seg[1]]
+            for joint in range(0, 19):
+                for frame in range(seg[1] - seg[0]):
+                    # Assign the x-y-z coordinates individually, due to differing data structures
+                    new_subject['joints19'][joint * 3][frame] = (np.array(framePoses)[frame, subject, joint, 0])
+                    new_subject['joints19'][joint * 3 + 1][frame] = (np.array(framePoses)[frame, subject, joint, 1])
+                    new_subject['joints19'][joint * 3 + 2][frame] = (np.array(framePoses)[frame, subject, joint, 2])
 
-        # Write the trimmed data to the designated files
+        # Write the new data to the designated files
         base = os.path.basename(inp)
-        outFile = open(("%s/%s_part%d.pkl" % (output, base[:-4], fileCount)), "wb")
-        print("Writing data from frames %d:%d to file %s_part%d.pkl" % (seg[0], seg[1], base[:-4], fileCount))
+        outFile = open(("%s/%s_part%d.pkl" % (output, base[:-4], partCount)), "wb")
+        print("Writing data from frames %d:%d to file %s_part%d.pkl" % (seg[0], seg[1], base[:-4], partCount))
         pickle.dump(new_pickle, outFile)
         outFile.close()
-        fileCount += 1
+        partCount += 1
 
 
 def main(argv):
@@ -249,7 +335,7 @@ def main(argv):
     for file in os.listdir(FLAGS.input):
         target = "%s/%s" % (FLAGS.input, file)
         print("Reading data from: ", target)
-        preprocess_frames(target, FLAGS.output)
+        preprocess_frames(target, FLAGS.output, FLAGS.subsample, FLAGS.supersample)
 
 
 if __name__ == "__main__":
