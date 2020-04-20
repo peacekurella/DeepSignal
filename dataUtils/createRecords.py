@@ -5,6 +5,9 @@ from absl import app
 from absl import flags
 import sys
 import random
+import getTrajectory as traj
+
+tf.executing_eagerly()
 
 # set up flags
 FLAGS = flags.FLAGS
@@ -12,8 +15,8 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('input', '../normalized', 'Input Directory')
 flags.DEFINE_string('train', '../train', 'Train record output directory')
 flags.DEFINE_string('test', '../test', 'Train record output directory')
-flags.DEFINE_integer('seqLength', 117, 'Sequence length')
-flags.DEFINE_integer('testFiles', 50, 'Number of pkl files used for testing')
+flags.DEFINE_integer('seqLength', 80, 'Sequence length')
+flags.DEFINE_integer('testFiles', 50, 'Maximum Number of pkl files used for testing')
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints in the skeleton')
 
 
@@ -28,33 +31,32 @@ def split_into_features(sequence):
     seqLength = sequence.shape[0]
 
     # split into features
-    buyerJoints, leftSellerJoints, rightSellerJoints, buyerNorms, leftSellerNorms, rightSellerNorms = tf.split(sequence, 6, axis=1)
+    buyerJoints, leftSellerJoints, rightSellerJoints = tf.split(sequence, 3, axis=1)
 
     # preserve order for proper visualization
     buyerJoints = tf.reshape(buyerJoints, (seqLength, FLAGS.keypoints))
     rightSellerJoints = tf.reshape(rightSellerJoints, (seqLength, FLAGS.keypoints))
     leftSellerJoints = tf.reshape(leftSellerJoints, (seqLength, FLAGS.keypoints))
-    buyerNorms = tf.reshape(buyerJoints, (seqLength, FLAGS.keypoints))
-    rightSellerNorms = tf.reshape(rightSellerJoints, (seqLength, FLAGS.keypoints))
-    leftSellerNorms = tf.reshape(leftSellerJoints, (seqLength, FLAGS.keypoints))
-    return buyerJoints, leftSellerJoints, rightSellerJoints
 
-def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints,
-                     buyerNormals, leftSellerNormals, rightSellerNormals, seqLength):
+    # convert to trajectories
+    b_start, buyerJoints = traj.convert_to_trajectory(buyerJoints)
+    l_start, leftSellerJoints = traj.convert_to_trajectory(leftSellerJoints)
+    r_start, rightSellerJoints = traj.convert_to_trajectory(rightSellerJoints)
+
+    return b_start, buyerJoints, l_start, leftSellerJoints, r_start, rightSellerJoints
+
+
+def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints, seqLength):
     """
     creates a dataset object with features as tuples
     :param buyerJoints: Sequence of buyerJoints
     :param leftSellerJoints: Sequence of leftSellerJoints
     :param rightSellerJoints: Sequence of rightSellerJoints
-    :param buyerNormals: Sequence of buyer's bodyNormals
-    :param leftSellerNormals: Sequence of leftSeller's bodyNormals
-    :param rightSellerNormals: Sequence of rightSeller's bodyNormals
     :param seqLength: length of sequences
     :return: Tensorflow dataset object with feature tuples
     """
     # stack all features
-    sequence = tf.stack([buyerJoints, leftSellerJoints, rightSellerJoints,
-                         buyerNorms, leftSellerNorms, rightSellerNorms])
+    sequence = tf.stack([buyerJoints, leftSellerJoints, rightSellerJoints])
 
     # split by time axis to create a tensor
     sequence = tf.stack(tf.split(sequence, len(buyerJoints[0]), axis=2))
@@ -63,13 +65,14 @@ def generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints,
     dataset = tf.data.Dataset.from_tensor_slices(sequence)
     dataset = dataset.window(seqLength, 2, 1, True)
 
-    # flatten dataset comin from window
+    # flatten dataset coming from window
     dataset = dataset.flat_map(lambda x: x)
     dataset = dataset.batch(seqLength, drop_remainder=True)
 
     # generate feature splits
     dataset = dataset.map(split_into_features)
     return dataset
+
 
 def _tensor_feature(value):
     """
@@ -79,53 +82,49 @@ def _tensor_feature(value):
     """
     value = tf.io.serialize_tensor(value)
     if isinstance(value, type(tf.constant(0))):
-        value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
+        value = value.numpy()  # BytesList won't unpack a string from an EagerTensor.
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def serialize_example(buyerJoints, leftSellerJoints, rightSellerJoints,
-                      buyerNorms, leftSellerNorms, rightSellerNorms):
+def serialize_example(b_start, buyerJoints, l_start, leftSellerJoints, r_start, rightSellerJoints):
     """
     Serializes a training example
     :param buyerJoints: buyer joint Sequence
     :param leftSellerJoints:  left seller joint joint sequence
     :param rightSellerJoints: right seller joint sequence
-    :param buyerNorms: Sequence of buyer's bodyNorms
-    :param leftSellerNorms: Sequence of leftSeller's bodyNorms
-    :param rightSellerNorms: Sequence of rightSeller's bodyNorms
     :return: serialized dict of features
     """
 
     # create a dict of features
     feature = {
         'br': _tensor_feature(buyerJoints),
+        'b_start': _tensor_feature(b_start),
         'ls': _tensor_feature(leftSellerJoints),
-        'rs': _tensor_feature(rightSellerJoints)
-        'brnorm': _tensor_feature(buyerNorms),
-        'lsnorm': _tensor_feature(leftSellerNorms),
-        'rsnorm': _tensor_feature(rightSellerNorms)
+        'l_start': _tensor_feature(l_start),
+        'rs': _tensor_feature(rightSellerJoints),
+        'r_start': _tensor_feature(r_start)
     }
 
     # serialize feature dict
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
     return example_proto.SerializeToString()
 
-def tf_serialize_example(buyerJoints, leftSellerJoints, rightSellerJoints,
-                         buyerNorms, leftSellerNorms, rightSellerNorms):
+
+def tf_serialize_example(b_start, buyerJoints, l_start, leftSellerJoints, r_start, rightSellerJoints):
     """
-    Wrapper function for serialize_example
+    Wrapper function for serialize example
     :param buyerJoints: buyer joint Sequence
     :param leftSellerJoints:  left seller joint joint sequence
     :param rightSellerJoints: right seller joint sequence
-    :param buyerNorms: Sequence of buyer's bodyNorms
-    :param leftSellerNorms: Sequence of leftSeller's bodyNorms
-    :param rightSellerNorms: Sequence of rightSeller's bodyNorms
-    :return: Serialized features
+    :param buyer_start: start position of buyer
+    :param left_start:  start position of left seller
+    :param right_start: start_position of right_seller
+    :return: serialized tensor string
     """
-    args = (buyerJoints, leftSellerJoints, rightSellerJoints,
-            buyerNorms, leftSellerNorms, rightSellerNorms)
+    args = (b_start, buyerJoints, l_start, leftSellerJoints, r_start, rightSellerJoints)
     tf_string = tf.py_function(serialize_example, args, tf.string)
     return tf.reshape(tf_string, ())
+
 
 def main(argv):
     """
@@ -173,39 +172,30 @@ def main(argv):
         buyerJoints = []
         leftSellerJoints = []
         rightSellerJoints = []
-        buyerNorms = []
-        leftSellerNorms = []
-        rightSellerNorms = []
 
         # load the skeletons
         for subject in group['subjects']:
-            if (subject['humanId'] == leftSellerId):
+            if subject['humanId'] == leftSellerId:
                 leftSellerJoints = subject['joints19']
-                leftSellerNorms = subject['bodyNormal']
-            if (subject['humanId'] == rightSellerId):
+            if subject['humanId'] == rightSellerId:
                 rightSellerJoints = subject['joints19']
-                rightSellerNorms = subject['bodyNormal']
-            if (subject['humanId'] == buyerId):
+            if subject['humanId'] == buyerId:
                 buyerJoints = subject['joints19']
-                buyerNorms = subject['bodyNormal']
 
-        # create dataset from the sequences
-        dataset = generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints,
-                                   buyerNorms, leftSellerNorms, rightSellerNorms, seqLength)
-        record = dataset.map(tf_serialize_example)
+        if len(buyerJoints[0]) > FLAGS.seqLength:
+            # generate the dataset
+            dataset = generate_dataset(buyerJoints, leftSellerJoints, rightSellerJoints, seqLength)
+            record = dataset.map(tf_serialize_example)
 
-        # write to TFrecord file
-        if(count < FLAGS.testFiles):
-            filename = os.path.join(FLAGS.test, file.split('.')[0]+'.TFrecord')
-        else:
-            filename = os.path.join(FLAGS.train, file.split('.')[0] + '.TFrecord')
-        writer = tf.data.experimental.TFRecordWriter(filename)
-        writer.write(record)
-        print(filename)
+            # write to TFrecord file
+            if file.find("a1") >= 0:
+                filename = os.path.join(FLAGS.test, file.split('.')[0] + ".TFrecord")
+            else:
+                filename = os.path.join(FLAGS.train, file.split('.')[0] + ".TFrecord")
+            writer = tf.data.experimental.TFRecordWriter(filename)
+            writer.write(record)
+            print(filename)
+
 
 if __name__ == '__main__':
     app.run(main)
-
-
-
-

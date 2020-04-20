@@ -16,8 +16,7 @@ import numpy as np
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('input', '../train', 'Input Directory')
-flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
-flags.DEFINE_string('ckpt_ae', '../ckpt_ae', 'Directory of auto encoder ckpt')
+flags.DEFINE_string('ckpt', '../ckpt_ae', 'Directory to store checkpoints')
 flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
 flags.DEFINE_boolean('load_ckpt', False, "Resume training")
 
@@ -82,7 +81,7 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
     batch_loss = (loss / time_steps)
 
     # get trainable variables
-    variables = encoder.trainable_variables
+    variables = encoder.trainable_variables + decoder.trainable_variables
 
     # get the gradients
     gradients = tape.gradient(loss, variables)
@@ -125,27 +124,17 @@ def main(args):
     logs = FLAGS.logs
 
     # create encoder, decoder, and optimizer
-    seq_encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
+    encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
     decoder = model.Decoder(keypoints, dec_size, batch_size, dec_layers, dec_drop)
     optimizer = tf.keras.optimizers.Adam(
         lr=learning_rate
     )
 
-    # load the decoder from auto encoder
-    checkpoint = tf.train.Checkpoint(
-        decoder=decoder
-    )
-
-    checkpoint.restore(
-        tf.train.latest_checkpoint(FLAGS.ckpt_ae)
-    ).expect_partial()
-
-
     # create checkpoint saver
     checkpoint = tf.train.Checkpoint(
         optimizer=optimizer,
-        encoder=seq_encoder,
-        decoder=decoder,
+        encoder=encoder,
+        decoder=decoder
     )
 
     # load checkpoint if needed
@@ -176,11 +165,11 @@ def main(args):
             _, r = r
 
             # split into input and target
-            input_seq = tf.concat([b, r], axis=2)
+            input_seq = l
             target_seq = l
 
             # actual train step
-            batch_loss = train_step(input_seq, target_seq, seq_encoder, decoder, optimizer)
+            batch_loss = train_step(input_seq, target_seq, encoder, decoder, optimizer)
             epoch_loss += batch_loss
 
             # print progress periodically
@@ -193,11 +182,11 @@ def main(args):
             batch += 1
 
             # split into input and target
-            input_seq = tf.concat([b, l], axis=2)
+            input_seq = r
             target_seq = r
 
             # actual train step
-            batch_loss = train_step(input_seq, target_seq, seq_encoder, decoder, optimizer)
+            batch_loss = train_step(input_seq, target_seq, encoder, decoder, optimizer)
             epoch_loss += batch_loss
 
             # print progress periodically
