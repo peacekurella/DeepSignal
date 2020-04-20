@@ -5,6 +5,7 @@ import os
 import modelBuilder as model
 import numpy as np
 import sys
+
 sys.path.append('..')
 import dataUtils.dataVis as vis
 import dataUtils.getData as db
@@ -33,6 +34,7 @@ flags.DEFINE_integer('epochs', 60, 'Number of training epochs')
 flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 
+
 def run_inference(input_seq, target_seq, encoder, decoder):
     """
     Returns the predictions given input_seq
@@ -45,7 +47,6 @@ def run_inference(input_seq, target_seq, encoder, decoder):
 
     # number of time steps the
     time_steps = target_seq.shape[1]
-
 
     # initialize encoder hidden state
     enc_hidden = encoder.initialize_hidden_state(1)
@@ -101,7 +102,6 @@ def main(args):
     dec_drop = FLAGS.dec_drop
     batch_size = FLAGS.batch_size
     output = FLAGS.output
-    
 
     # create encoder, decoder, and optimizer
     encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
@@ -164,8 +164,7 @@ def main(args):
 
             # append for calculating metrics
             total_error.append(total_errors / (keypoints * l.shape[1]))
-            seqWise.update({'epoch_'+str(count)+'batch_'+str(i)+'_input': total_errors})
-
+            seqWise.update({'epoch_' + str(count) + 'batch_' + str(i) + '_input': total_errors})
 
             # save the inference
             vis.create_animation(
@@ -173,7 +172,7 @@ def main(args):
                 left.T,
                 right.T,
                 predictions.T,
-                os.path.join(output, 'epoch_'+str(count)+'batch_'+str(i)+'_output')
+                os.path.join(output, 'epoch_' + str(count) + 'batch_' + str(i) + '_output')
             )
             count += 1
 
@@ -185,6 +184,7 @@ def main(args):
     w = csv.writer(open("Errors.csv", "w"))
     for key, val in seqWise.items():
         w.writerow([key, val])
+
 
 if __name__ == '__main__':
     app.run(main)
