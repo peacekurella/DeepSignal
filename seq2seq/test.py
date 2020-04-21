@@ -5,6 +5,7 @@ import os
 import modelBuilder as model
 import numpy as np
 import sys
+
 sys.path.append('..')
 import dataUtils.dataVis as vis
 import dataUtils.getData as db
@@ -17,6 +18,8 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('input', '../test', 'Input Directory')
 flags.DEFINE_string('output', '../inference', 'Input Directory')
 flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
+flags.DEFINE_string('ckpt_ae', '../ckpt_ae', 'Directory to store checkpoints')
+flags.DEFINE_boolean('load_ae', False, "Test auto encoder")
 
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
@@ -31,6 +34,7 @@ flags.DEFINE_integer('epochs', 60, 'Number of training epochs')
 flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 
+
 def run_inference(input_seq, target_seq, encoder, decoder):
     """
     Returns the predictions given input_seq
@@ -44,7 +48,6 @@ def run_inference(input_seq, target_seq, encoder, decoder):
     # number of time steps the
     time_steps = target_seq.shape[1]
 
-
     # initialize encoder hidden state
     enc_hidden = encoder.initialize_hidden_state(1)
 
@@ -52,7 +55,7 @@ def run_inference(input_seq, target_seq, encoder, decoder):
     enc_output, enc_hidden = encoder(input_seq, enc_hidden, False)
 
     # set the decoder hidden state and input
-    dec_input = target_seq[:, 0, :]
+    dec_input = target_seq[:, 0]
     dec_hidden = enc_hidden
 
     # list of predictions
@@ -84,7 +87,10 @@ def main(args):
     buffer_size = FLAGS.buffer_size
     batch_size = FLAGS.batch_size
     dataset = db.prepare_dataset(input, buffer_size, batch_size, False)
-    checkpoint_dir = tf.train.latest_checkpoint(FLAGS.ckpt)
+    if FLAGS.load_ae:
+        checkpoint_dir = tf.train.latest_checkpoint(FLAGS.ckpt_ae)
+    else:
+        checkpoint_dir = tf.train.latest_checkpoint(FLAGS.ckpt)
 
     # set up experiment
     keypoints = FLAGS.keypoints
@@ -96,7 +102,6 @@ def main(args):
     dec_drop = FLAGS.dec_drop
     batch_size = FLAGS.batch_size
     output = FLAGS.output
-    
 
     # create encoder, decoder, and optimizer
     encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
@@ -135,8 +140,11 @@ def main(args):
         for i in range(b.shape[0]):
 
             # split into input and target
-            input_seq = tf.expand_dims(tf.concat([b, r], axis=2)[i], axis=0)
-            target_seq = tf.expand_dims(l[i], axis=0)
+            if not FLAGS.load_ae:
+                input_seq = tf.expand_dims(tf.concat([b, l], axis=2)[i], axis=0)
+            else:
+                input_seq = tf.expand_dims(r[i], axis=0)
+            target_seq = tf.expand_dims(r[i], axis=0)
 
             # run the inference op
             predictions = run_inference(input_seq, target_seq, encoder, decoder)
@@ -147,7 +155,7 @@ def main(args):
             right = traj.convert_to_absolute(r_start[i].numpy(), r[i].numpy())
 
             # convert trajectory to prediction
-            pred_start = l_start[i]
+            pred_start = r_start[i]
             predictions = traj.convert_to_absolute(pred_start, predictions.numpy())
 
             # calculate the average joint error across all frames
@@ -156,8 +164,7 @@ def main(args):
 
             # append for calculating metrics
             total_error.append(total_errors / (keypoints * l.shape[1]))
-            seqWise.update({'epoch_'+str(count)+'batch_'+str(i)+'_input': total_errors})
-
+            seqWise.update({'epoch_' + str(count) + 'batch_' + str(i) + '_input': total_errors})
 
             # save the inference
             vis.create_animation(
@@ -165,7 +172,7 @@ def main(args):
                 left.T,
                 right.T,
                 predictions.T,
-                os.path.join(output, 'epoch_'+str(count)+'batch_'+str(i)+'_output')
+                os.path.join(output, 'epoch_' + str(count) + 'batch_' + str(i) + '_output')
             )
             count += 1
 
@@ -177,6 +184,7 @@ def main(args):
     w = csv.writer(open("Errors.csv", "w"))
     for key, val in seqWise.items():
         w.writerow([key, val])
+
 
 if __name__ == '__main__':
     app.run(main)
