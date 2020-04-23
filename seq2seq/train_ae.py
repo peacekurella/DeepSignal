@@ -60,7 +60,8 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
 
         # input the hidden state
         dec_hidden = enc_hidden
-        dec_input = target_seq[:, 0]
+        #dec_input = target_seq[:, 0]
+        dec_input = tf.zeros(target_seq[:, 0].shape)
 
         # start teacher forcing the network
         for t in range(1, time_steps):

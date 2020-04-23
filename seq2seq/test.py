@@ -55,14 +55,14 @@ def run_inference(input_seq, target_seq, encoder, decoder):
     enc_output, enc_hidden = encoder(input_seq, enc_hidden, False)
 
     # set the decoder hidden state and input
-    dec_input = target_seq[:, 0]
+    #dec_input = target_seq[:, 0]
+    dec_input = tf.zeros(target_seq[:, 0].shape)
     dec_hidden = enc_hidden
 
     # list of predictions
     predictions = []
-    predictions.append(dec_input)
 
-    for t in range(1, time_steps):
+    for t in range(time_steps):
         # get the predictions
         prediction, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, False)
         predictions.append(prediction)
