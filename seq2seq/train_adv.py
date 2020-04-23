@@ -90,7 +90,7 @@ def train_step(input_seq, target_seq, encoder, decoder, discriminator, gen_optim
     :param discriminator: Discriminator object
     :param gen_optimizer: generator optimizer object
     :param disc_optimizer: discriminator optimizer object
-    :return:
+    :return: disc_loss, adv_loss, mse_loss, gen_loss
     """
 
     # initialize loss
@@ -115,15 +115,11 @@ def train_step(input_seq, target_seq, encoder, decoder, discriminator, gen_optim
             prediction, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, True)
             predictions.append(tf.expand_dims(prediction, axis=1))
 
-            # purge the tensors from memory
-            del dec_input
-
             # set the next target value as input to decoder
             dec_input = target_seq[:, t]
 
         # concatenate predictions time axis
         gen_seq = tf.concat(predictions, axis=1)
-        print(gen_seq.shape)
 
         # pass through discriminator
         disc_real = discriminator(target_seq)
