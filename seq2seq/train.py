@@ -61,14 +61,15 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
 
         # input the hidden state
         dec_hidden = enc_hidden
-        dec_input = target_seq[:, 0]
+        #dec_input = target_seq[:, 0]
+        dec_input = tf.zeros(target_seq[:, 0].shape)
 
         # start teacher forcing the network
         for t in range(1, time_steps):
             # pass dec_input and target sequence to decoder
             prediction, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output, True)
 
-            # calculate the loss for every time step
+            # calculate the loss for every time stepcl
             losses = tf.keras.losses.MSE(target_seq[:, t], prediction)
             loss += tf.reduce_mean(losses)
 
