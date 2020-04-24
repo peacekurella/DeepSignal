@@ -288,7 +288,7 @@ def preprocess_frames(inp, output, subsample, supersample):
 
             # Assign the clipped values for each separate pkl file.
             for joint in range(0, 57):
-                old_joints = group['subjects'][subject][joint]
+                old_joints = group['subjects'][subject]['joints19'][joint]
 
                 # If supersampling, then we need to linearly interpolate data
                 if supersample != 0:
