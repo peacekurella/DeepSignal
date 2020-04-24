@@ -1,6 +1,6 @@
 import pickle
 import os
-from dataUtils.dataVis import create_animation
+from dataVis import create_animation
 import sys
 from absl import app
 from absl import flags
@@ -57,7 +57,7 @@ def main(argv):
 
         # create a new video only if it doesn't exist
         if not (os.path.isfile(os.path.join(FLAGS.output, file.split('.')[0]+'.mp4'))):
-            create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, os.path.join(FLAGS.output, file.split('.')[0]))
+            create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, None, os.path.join(FLAGS.output, file.split('.')[0]))
 
 if __name__== '__main__':
     app.run(main)
