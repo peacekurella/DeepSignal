@@ -16,6 +16,36 @@ flags.DEFINE_integer("supersample", 0, "How many frames to linearly interpolate 
 flags.DEFINE_integer("min_length", 50, "How many frames are required to consider a video clip long enough to use")
 
 
+def super_sampling(inp, k):
+    """
+    Returns a linearly interpolated supersample of the original sequence
+    :param inp: Input sequence of positions
+    :param k: Number of interpolated frames, should be an integer >= 1
+    :return: The newly generated sequence of (k + 1) * n frames
+    """
+    inp = np.array(inp)
+    out = []
+    for frame in range(1, len(inp)):
+        diff = inp[frame] - inp[frame - 1]   # Find the average change in position between frames
+        for step in range(int(k)):
+            out.append(step / k * diff + inp[frame - 1])
+
+    return np.array(out)
+
+
+def sub_sampling(inp, k):
+    """
+    Returns a subsample which skips every kth frame of the original sequence
+    :param inp: Input sequence of posiitons as a numpy array
+    :param k: Number of frames to be skipped at each step
+    :return: The newly generated sequence of n / k frames
+    """
+    out = []
+    for frame in range(0, len(inp), k):
+        out.append(inp[frame])
+    return np.array(out)
+
+
 def joint_positions(leftSellerJoints, rightSellerJoints, buyerJoints):
     """
     Find the x-y-z coordinates for each person"s joints within each frame from the original frame data.
@@ -61,7 +91,7 @@ def joint_positions(leftSellerJoints, rightSellerJoints, buyerJoints):
     return leftSellerFrameJoints, rightSellerFrameJoints, buyerFrameJoints
 
 
-def bone_lengths(lSJoints, rSJoints, bJoints, humanSkeleton):
+def bone_lengths(lSJoints, rSJoints, bJoints, humanSkeleton, supersample=0, subsample=0):
     """
     Calculate and collect the float length of each bone into a single list.
     :param lSJoints: Raw joint data for the left seller
@@ -74,6 +104,27 @@ def bone_lengths(lSJoints, rSJoints, bJoints, humanSkeleton):
     # Determine the positions of each person"s joints
     leftSellerFrameJoints, rightSellerFrameJoints, buyerFrameJoints = joint_positions(lSJoints, rSJoints, bJoints)
 
+    # Check for super-/subsampling requirements before finding problem frames
+    if supersample != 0:
+        leftSellerFrameJoints = super_sampling(leftSellerFrameJoints, supersample)
+        rightSellerFrameJoints = super_sampling(rightSellerFrameJoints, supersample)
+        buyerFrameJoints = super_sampling(buyerFrameJoints, supersample)
+    if subsample != 0:
+        leftSellerFrameJoints = sub_sampling(leftSellerFrameJoints, subsample)
+        rightSellerFrameJoints = sub_sampling(rightSellerFrameJoints, subsample)
+        buyerFrameJoints = sub_sampling(buyerFrameJoints, subsample)
+
+    # Collect frames where all of a joints coords are at 0: Avoid those frames
+    problem_frames = []
+    for frame in range(0, len(leftSellerFrameJoints)):
+        for joint in range(0, 19):
+            ls = leftSellerFrameJoints[frame][joint]
+            rs = rightSellerFrameJoints[frame][joint]
+            b = buyerFrameJoints[frame][joint]
+            if (ls[0] == 0 and ls[1] == 0 and ls[2] == 0) or (ls[0] == 0 and rs[1] == 0 and rs[2] == 0) or (b[0] == 0 and b[1] == 0 and b[2] == 0):
+                problem_frames.append(frame)
+                continue
+    
     # Calculate the length of each person"s bones
     frameBones = []
     for frame in range(0, len(leftSellerFrameJoints)):
@@ -103,37 +154,7 @@ def bone_lengths(lSJoints, rSJoints, bJoints, humanSkeleton):
 
         frameBones.append(boneLengths)
 
-    return frameBones
-
-
-def velocities(leftSellerJoints, rightSellerJoints, buyerJoints):
-    """
-    Determine changes in position for each subject's joints in the video
-    :param leftSellerJoints: The left seller's "joints19" data from the pickle files
-    :param rightSellerJoints: The right seller's "joints19" data from the pickle files
-    :param buyerJoints: The buyer's "joints19" data from the pickle files
-    :return: The change in position for each joint from frame i to i + 1, as a
-    triple of x-y-z deltas in the form of:
-    Frame f: [lS(joint1(dx, dy, dz), ..., joint19(dx, dy, dz)),
-    rS(joint1(dx, dy, dz), ..., joint19(dx, dy, dz),
-    b(joint1(dx, dy, dz), ..., joint19(dx, dy, dz))]
-    """
-    # Partition position data into left, right, and buyer framewise joints
-    # Use np array format for easy array arithmetic
-    leftSellerFrameJoints, rightSellerFrameJoints, buyerFrameJoints = np.array(joint_positions(leftSellerJoints,
-                                                                                               rightSellerJoints,
-                                                                                               buyerJoints))
-
-    # Calculate the changes in each subject's joint positions throughout the video, then append to the master array
-    total = []
-    for frame in range(1, leftSellerJoints.shape[1]):
-        d_leftSeller = leftSellerFrameJoints[frame] - leftSellerFrameJoints[frame - 1]
-        d_rightSeller = rightSellerFrameJoints[frame] - rightSellerFrameJoints[frame - 1]
-        d_buyer = buyerFrameJoints[frame] - buyerFrameJoints[frame - 1]
-        total.append((d_leftSeller, d_rightSeller, d_buyer))
-
-    total = np.array(total)
-    return total
+    return frameBones, problem_frames
 
 
 def get_segments(bones):
@@ -149,7 +170,7 @@ def get_segments(bones):
 
     # Current method uses mean and standard deviations for the error tolerances
     means = np.mean(frameBones, axis=0)
-    tolerance = np.std(frameBones, axis=0) * 5
+    tolerance = np.std(frameBones, axis=0) * 3
 
     # Alternative method: Use percentiles as thresholds
     # upper_percent = np.percentile(frameBones, 99, axis=0)
@@ -157,11 +178,11 @@ def get_segments(bones):
 
     for frame in range(0, len(frameBones)):
         for joint in range(0, len(frameBones[frame])):
-            lower = means[joint] - tolerance[joint]
-            upper = means[joint] + tolerance[joint]
-            # upper = upper_percent[joint]
-            # lower = lower_percent[joint]
-            if np.any(lower > frameBones[frame][joint]) or np.any(upper < frameBones[frame][joint]):
+            lower_thresh = means[joint] - tolerance[joint]
+            upper_thresh = means[joint] + tolerance[joint]
+            # upper_thresh = upper_percent[joint]
+            # lower_thresh = lower_percent[joint]
+            if np.any(frameBones[frame][joint] < lower_thresh) or np.any(frameBones[frame][joint] > upper_thresh):
                 problemFrames.append(frame)
                 break
 
@@ -177,34 +198,6 @@ def get_segments(bones):
         segments.append((0, len(frameBones) - 1))
 
     return segments
-
-
-def super_sampling(inp, k):
-    """
-    Returns a linearly interpolated supersample of the original sequence
-    :param inp: Input sequence of positions
-    :param k: Number of interpolated frames, should be an integer >= 1
-    :return: The newly generated sequence of (k + 1) * n frames
-    """
-    out = []
-    for frame in range(1, len(inp)):
-        diff = inp[frame] - inp[frame - 1]   # Find the average change in position between frames
-        for step in range(int(k)):
-            out.append(step / k * diff + inp[frame - 1])
-    return np.array(out)
-
-
-def sub_sampling(inp, k):
-    """
-    Returns a subsample which skips every kth frame of the original sequence
-    :param inp: Input sequence of posiitons as a numpy array
-    :param k: Number of frames to be skipped at each step
-    :return: The newly generated sequence of n / k frames
-    """
-    out = []
-    for frame in range(0, inp.shape[0], k):
-        out.append(inp[frame])
-    return np.array(out)
 
 
 def preprocess_frames(inp, output, subsample, supersample):
@@ -233,7 +226,6 @@ def preprocess_frames(inp, output, subsample, supersample):
     leftSellerJoints = []
     rightSellerJoints = []
 
-    # load the skeletons
     for subject in group["subjects"]:
         if subject["humanId"] == leftSellerId:
             leftSellerJoints = subject["joints19"]
@@ -260,48 +252,49 @@ def preprocess_frames(inp, output, subsample, supersample):
         [10, 11]
     ]
 
-    # Calculate the relevant data for each frame, either bone length or velocities
-    # frameBones = bone_lengths(leftSellerJoints, rightSellerJoints, buyerJoints, humanSkeleton)
-    framePoses = velocities(leftSellerJoints, rightSellerJoints, buyerJoints)
-
-    # Determine if super- or subsampling the data is necessary from user input
-    if supersample >= 1:
-        framePoses = super_sampling(framePoses, supersample)
-    if subsample >= 1:
-        framePoses = sub_sampling(framePoses, subsample)
+    # Calculate the bone lengths and problematic frames for the given data. 
+    frameBones, zero_frames = bone_lengths(leftSellerJoints, rightSellerJoints, buyerJoints, humanSkeleton, FLAGS.supersample, FLAGS.subsample)
 
     # Use the bone length data to filter out outliers and excessively noisy data
-    segments = get_segments(framePoses)
+    bone_segments = get_segments(frameBones)
+
+    # Merge the information to one list of usable segments
+    zero_ptr = 0
+    bone_ptr = 0
+    while zero_ptr < len(zero_frames) and bone_ptr < len(bone_segments):
+        z_frame = zero_frames[zero_ptr]
+        if z_frame > bone_segments[bone_ptr][0]:
+            if z_frame < bone_segments[bone_ptr][1]:
+                del(bone_segments[bone_ptr])
+            else:
+                bone_ptr += 1
+        else:
+            zero_ptr += 1       
 
     # Create a new copy of the data, to be reused for each data segment
     new_pickle = copy.deepcopy(group)
 
     # Write new pickle files, each one containing data for exactly one good segment of video
     partCount = 0
-    for seg in segments:
+    for seg in bone_segments:
         # Record data for each subject in the video
         for subject in range(0, len(group["subjects"])):
             # Reset sizes of the 2d numpy arrays in the new pickle dictionary
             new_subject = new_pickle["subjects"][subject]
+
+            # NOTE: Currently we don't update the bodyNormal, faceNormal, and scores data.
+            # Use trimmed segments from original data for all frame-dependent positions
             new_subject["joints19"] = np.zeros((57, seg[1] - seg[0]))
 
-            # NOTE: Currently we discard the bodyNormal, faceNormal, and scores data. This section is deprecated
-            # new_subject["bodyNormal"] = np.zeros((3, seg[1] - seg[0]))
-            # new_subject["faceNormal"] = np.zeros((3, seg[1] - seg[0]))
-            # new_subject["scores"] = np.zeros((19, seg[1] - seg[0]))
-            # for j in range(0, 3):
-            #     new_subject["bodyNormal"][j] = old_subject["bodyNormal"][j][seg[0]:seg[1]]
-            #     new_subject["faceNormal"][j] = old_subject["faceNormal"][j][seg[0]:seg[1]]
-            # for j in range(0, 19):
-            #     new_subject["scores"][j] = old_subject["scores"][j][seg[0]:seg[1]]
+            # Assign the clipped values for each separate pkl file.
+            for joint in range(0, 57):
+                old_joints = group['subjects'][subject][joint]
 
-            # Use trimmed segments from original data for all frame-dependent information
-            for joint in range(0, 19):
-                for frame in range(seg[1] - seg[0]):
-                    # Assign the x-y-z coordinates individually, due to differing data structures
-                    new_subject['joints19'][joint * 3][frame] = (np.array(framePoses)[frame, subject, joint, 0])
-                    new_subject['joints19'][joint * 3 + 1][frame] = (np.array(framePoses)[frame, subject, joint, 1])
-                    new_subject['joints19'][joint * 3 + 2][frame] = (np.array(framePoses)[frame, subject, joint, 2])
+                # If supersampling, then we need to linearly interpolate data
+                if supersample != 0:
+                    old_joints = super_sampling(old_joints, supersample)
+                
+                new_subject['joints19'][joint] = old_joints[seg[0]:seg[1]]
 
         # Write the new data to the designated files
         base = os.path.basename(inp)
