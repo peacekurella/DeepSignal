@@ -1,6 +1,8 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.axes3d as p3
 import matplotlib.animation as anim
+matplotlib.use("Agg")
 
 def create_animation(buyerJoints, leftSellerJoints, rightSellerJoints, inferedJoints, fileName):
     """
