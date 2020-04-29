@@ -9,9 +9,10 @@ from absl import app
 # set up flags
 FLAGS = flags.FLAGS
 
+flags.DEFINE_string('statsDir', '../stats', 'Directory to store stats')
 flags.DEFINE_string('trainData', '../train', 'Train record directory')
-flags.DEFINE_string('meanCsv', 'mean.csv', 'CSV file to store mean')
-flags.DEFINE_string('stdCsv', 'std.csv', 'CSV file to store standard deviation')
+flags.DEFINE_string('meanCsv', '../stats/mean.csv', 'CSV file to store mean')
+flags.DEFINE_string('stdCsv', '../stats/std.csv', 'CSV file to store standard deviation')
 
 class StandardizeClass:
 
@@ -77,7 +78,14 @@ def main(argv):
 
     if not (os.path.isdir(FLAGS.trainData)):
         print("Invalid directory for train data")
-        sys.exit()                                                                 
+        sys.exit()   
+
+    if not (os.path.isdir(FLAGS.statsDir)):
+        try:
+            os.mkdir(FLAGS.statsDir)
+        except:
+            print("Error creating stats directory")
+            sys.exit()
 
     tf.compat.v1.enable_eager_execution()
     # read the files
