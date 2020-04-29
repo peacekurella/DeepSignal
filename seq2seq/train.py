@@ -20,6 +20,7 @@ flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
 flags.DEFINE_string('ckpt_ae', '../ckpt_ae', 'Directory of auto encoder ckpt')
 flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
 flags.DEFINE_boolean('load_ckpt', False, "Resume training")
+flags.DEFINE_boolean('std', True, 'standardize data before training')
 
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
@@ -61,7 +62,6 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
 
         # input the hidden state
         dec_hidden = enc_hidden
-        #dec_input = target_seq[:, 0]
         dec_input = tf.zeros(target_seq[:, 0].shape)
 
         # start teacher forcing the network
@@ -108,7 +108,7 @@ def main(args):
     input = FLAGS.input
     buffer_size = FLAGS.buffer_size
     batch_size = FLAGS.batch_size
-    dataset = db.prepare_dataset(input, buffer_size, batch_size, True)
+    dataset = db.prepare_dataset(input, buffer_size, batch_size, True, FLAGS.std)
 
     # set up experiment
     keypoints = FLAGS.keypoints

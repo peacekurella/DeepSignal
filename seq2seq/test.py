@@ -10,6 +10,7 @@ sys.path.append('..')
 import dataUtils.dataVis as vis
 import dataUtils.getData as db
 import dataUtils.getTrajectory as traj
+import dataUtils.standardize as stdrd
 import csv
 
 # set up flags
@@ -20,6 +21,7 @@ flags.DEFINE_string('output', '../inference', 'Input Directory')
 flags.DEFINE_string('ckpt', '../ckpt', 'Directory to store checkpoints')
 flags.DEFINE_string('ckpt_ae', '../ckpt_ae', 'Directory to store checkpoints')
 flags.DEFINE_boolean('load_ae', False, "Test auto encoder")
+flags.DEFINE_boolean('std', False, 'standardize data before training')
 
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
@@ -55,7 +57,6 @@ def run_inference(input_seq, target_seq, encoder, decoder):
     enc_output, enc_hidden = encoder(input_seq, enc_hidden, False)
 
     # set the decoder hidden state and input
-    #dec_input = target_seq[:, 0]
     dec_input = tf.zeros(target_seq[:, 0].shape)
     dec_hidden = enc_hidden
 
@@ -86,7 +87,8 @@ def main(args):
     input = FLAGS.input
     buffer_size = FLAGS.buffer_size
     batch_size = FLAGS.batch_size
-    dataset = db.prepare_dataset(input, buffer_size, batch_size, False)
+    dataset = db.prepare_dataset(input, buffer_size, batch_size, False, FLAGS.std)
+
     if FLAGS.load_ae:
         checkpoint_dir = tf.train.latest_checkpoint(FLAGS.ckpt_ae)
     else:
@@ -106,6 +108,7 @@ def main(args):
     # create encoder, decoder, and optimizer
     encoder = model.Encoder(enc_size, batch_size, enc_layers, enc_drop)
     decoder = model.Decoder(keypoints, dec_size, batch_size, dec_layers, dec_drop)
+    std = stdrd.StandardizeClass()
 
     # create checkpoint saver
     checkpoint = tf.train.Checkpoint(
@@ -149,14 +152,29 @@ def main(args):
             # run the inference op
             predictions = run_inference(input_seq, target_seq, encoder, decoder)
 
-            # convert to absolute values
-            buyer = traj.convert_to_absolute(b_start[i].numpy(), b[i].numpy())
-            left = traj.convert_to_absolute(l_start[i].numpy(), l[i].numpy())
-            right = traj.convert_to_absolute(r_start[i].numpy(), r[i].numpy())
+
+            # de standardize
+            if FLAGS.std:
+                b_std = std.destandardize(b[i].numpy())
+                l_std = std.destandardize(l[i].numpy())
+                r_std = std.destandardize(r[i].numpy())
+                predictions = std.destandardize(predictions.numpy())
+                target_seq = std.destandardize(target_seq.numpy())
+
+                # convert to absolute values
+                buyer = traj.convert_to_absolute(b_start[i].numpy(), b_std)
+                left = traj.convert_to_absolute(l_start[i].numpy(), l_std)
+                right = traj.convert_to_absolute(r_start[i].numpy(), r_std)
+
+            else:
+                # convert to absolute values
+                buyer = traj.convert_to_absolute(b_start[i].numpy(), b[i])
+                left = traj.convert_to_absolute(l_start[i].numpy(), l[i])
+                right = traj.convert_to_absolute(r_start[i].numpy(), r[i])
 
             # convert trajectory to prediction
             pred_start = r_start[i]
-            predictions = traj.convert_to_absolute(pred_start, predictions.numpy())
+            predictions = traj.convert_to_absolute(pred_start, predictions)
 
             # calculate the average joint error across all frames
             total_errors = tf.keras.losses.MSE(target_seq, predictions)

@@ -5,10 +5,6 @@ import sys
 import tensorflow as tf
 from absl import flags
 from absl import app
-from pathlib import Path
-
-sys.path.append('..')
-import dataUtils.getData as gd
 
 # set up flags
 FLAGS = flags.FLAGS
@@ -30,7 +26,7 @@ class StandardizeClass:
     @staticmethod
     def deserialize_example(example):
 
-        buyerJoints = tf.cast   (tf.io.parse_tensor(example['br'], out_type=tf.double), tf.float32)
+        buyerJoints = tf.cast(tf.io.parse_tensor(example['br'], out_type=tf.double), tf.float32)
         leftSellerJoints = tf.cast(tf.io.parse_tensor(example['ls'], out_type=tf.double), tf.float32)
         rightSellerJoints = tf.cast(tf.io.parse_tensor(example['rs'], out_type=tf.double), tf.float32)
 
@@ -50,6 +46,28 @@ class StandardizeClass:
 
         return joints
 
+
+def parse_example(example_proto):
+    """
+    Parses examples from the record files
+    :param example_proto: input example proto_buffer string
+    :return: parsed example
+    """
+
+    # create a feature descriptor
+    feature_description = {
+        'br': tf.io.FixedLenFeature([], tf.string),
+        'b_start': tf.io.FixedLenFeature([], tf.string),
+        'ls': tf.io.FixedLenFeature([], tf.string),
+        'l_start': tf.io.FixedLenFeature([], tf.string),
+        'rs': tf.io.FixedLenFeature([], tf.string),
+        'r_start': tf.io.FixedLenFeature([], tf.string),
+
+    }
+
+    return tf.io.parse_single_example(example_proto, feature_description)
+
+
 def main(argv):
     """
     Generates normalized tf records form the train data
@@ -67,7 +85,7 @@ def main(argv):
     dataset = tf.data.TFRecordDataset(files)
 
     # parse the examples
-    dataset = dataset.map(gd.parse_example)
+    dataset = dataset.map(parse_example)
 
     # deserialize the tensors
     dataset = dataset.map(StandardizeClass.deserialize_example)

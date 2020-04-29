@@ -9,8 +9,6 @@ import datetime
 
 sys.path.append('..')
 import dataUtils.getData as db
-import dataUtils.getTrajectory as traj
-import numpy as np
 
 # set up flags
 FLAGS = flags.FLAGS
@@ -19,6 +17,7 @@ flags.DEFINE_string('input', '../train', 'Input Directory')
 flags.DEFINE_string('ckpt', '../ckpt_ae', 'Directory to store checkpoints')
 flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
 flags.DEFINE_boolean('load_ckpt', False, "Resume training")
+flags.DEFINE_boolean('std', True, 'standardize data before training')
 
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
@@ -30,7 +29,7 @@ flags.DEFINE_float('dec_drop', 0.2, 'Decoder dropout probability')
 
 flags.DEFINE_integer('epochs', 140, 'Number of training epochs')
 flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
-flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
+flags.DEFINE_integer('batch_size', 1, 'Mini batch size')
 flags.DEFINE_integer('save', 10, 'Checkpoint save epochs')
 flags.DEFINE_float('learning_rate', 0.0001, 'learning rate')
 
@@ -60,7 +59,6 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
 
         # input the hidden state
         dec_hidden = enc_hidden
-        #dec_input = target_seq[:, 0]
         dec_input = tf.zeros(target_seq[:, 0].shape)
 
         # start teacher forcing the network
@@ -73,7 +71,7 @@ def train_step(input_seq, target_seq, encoder, decoder, optimizer):
             loss += tf.reduce_mean(losses)
 
             # purge the tensors from memory
-            del dec_input
+            del dec_input, prediction
 
             # set the next target value as input to decoder
             dec_input = target_seq[:, t]
@@ -107,7 +105,7 @@ def main(args):
     input = FLAGS.input
     buffer_size = FLAGS.buffer_size
     batch_size = FLAGS.batch_size
-    dataset = db.prepare_dataset(input, buffer_size, batch_size, True)
+    dataset = db.prepare_dataset(input, buffer_size, batch_size, True, FLAGS.std)
 
     # set up experiment
     keypoints = FLAGS.keypoints
