@@ -319,10 +319,7 @@ class Discriminator(tf.keras.Model):
         self.input_enc = Encoder(enc_units, batch_size, 1, dropout_rate)
 
         # initialize the dense layer
-        self.fc = tf.keras.layers.Dense(
-            1,
-            activation='softmax'
-        )
+        self.fc = tf.keras.layers.Dense(1)
 
         # initialize batch_size
         self.batch_size = batch_size

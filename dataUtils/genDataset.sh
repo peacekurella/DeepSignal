@@ -1,16 +1,9 @@
 #!/bin/bash
 
-read -e -p $'Enable Normalization (Y/N) : \n' -i "Y" PREP
-python preprocessing.py
+read -e -p $'Super Sampler ( Enter int from 0 to 2 ) : \n' -i "0" PREP
+python preprocessing.py --supersample $PREP
 rm -r ../input
-if [ $PREP = $"Y" ];then
-  python normalize.py
-  python createRecords.py
-  rm -r ../normalized
-  rm -r ../preprocessed
-else
-  python createRecords.py --input ../preprocessed
-  rm -r ../preprocessed
-fi
+python createRecords.py --input ../preprocessed
+rm -r ../preprocessed
 mkdir ../inference
 mkdir ../convOut

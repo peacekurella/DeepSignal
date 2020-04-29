@@ -34,6 +34,7 @@ def absolute_to_relative(prev_state, cur_state):
 
     return tf.expand_dims(tf.concat(cur_skeleton, axis=0), axis=0)
 
+
 def convert_to_trajectory(input_sequence):
     """
     Converts an input absolute sequence to trajectories

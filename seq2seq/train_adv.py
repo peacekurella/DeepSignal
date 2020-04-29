@@ -16,8 +16,11 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string('input', '../train', 'Input Directory')
 flags.DEFINE_string('ckpt', '../ckpt_adv', 'Directory to store checkpoints')
+flags.DEFINE_string('ckpt_ae', '../ckpt_ae', 'Directory to retrieve AE checkpoints')
 flags.DEFINE_string('logs', '../logs', 'Directory to log metrics')
-flags.DEFINE_boolean('load_ckpt', False, "Resume training")
+flags.DEFINE_boolean('load_ae', False, 'Load the decoder from auto encoder')
+flags.DEFINE_boolean('load_ckpt', False, 'Resume training')
+flags.DEFINE_boolean('train_dec', True, 'Train the decoder also')
 
 flags.DEFINE_integer('keypoints', 57, 'Number of keypoints')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
@@ -132,7 +135,10 @@ def train_step(input_seq, target_seq, encoder, decoder, discriminator, gen_optim
         adv_loss, mse_loss, gen_loss = generator_loss(disc_gen, gen_seq, target_seq)
 
     # train generator
-    variables = encoder.trainable_variables + decoder.trainable_variables
+    if not FLAGS.train_dec:
+        variables = encoder.trainable_variables + decoder.trainable_variables
+    else:
+        variables = encoder.trainable_variables
     gradients = gen_tape.gradient(gen_loss, variables)
     gen_optimizer.apply_gradients(zip(gradients, variables))
 
@@ -204,6 +210,15 @@ def main(args):
     if FLAGS.load_ckpt:
         checkpoint.restore(
             tf.train.latest_checkpoint(FLAGS.ckpt)
+        )
+
+    # load the auto encoder's decoder if needed
+    if FLAGS.load_ae:
+        ae_checkpoint = tf.train.Checkpoint(
+            decoder=decoder
+        )
+        ae_checkpoint.restore(
+            tf.train.latest_checkpoint(FLAGS.ckpt_ae)
         )
 
     # set up summary writers
@@ -293,13 +308,13 @@ def main(args):
 
         # log the loss
         with train_summary_writer.as_default():
-            tf.summary.scalar('MSE LOSS', data=(epoch_mse_loss / (steps_per_epoch * 2)), step=epoch)
-            tf.summary.scalar('ADV LOSS', data=(epoch_adv_loss / (steps_per_epoch * 2)), step=epoch)
-            tf.summary.scalar('GAN LOSS', data=(epoch_gen_loss / (steps_per_epoch * 2)), step=epoch)
-            tf.summary.scalar('DISC LOSS', data=(epoch_disc_loss / (steps_per_epoch * 2)), step=epoch)
+            tf.summary.scalar('MSE LOSS', data=(epoch_mse_loss / 2), step=epoch)
+            tf.summary.scalar('ADV LOSS', data=(epoch_adv_loss / 2), step=epoch)
+            tf.summary.scalar('GAN LOSS', data=(epoch_gen_loss / 2), step=epoch)
+            tf.summary.scalar('DISC LOSS', data=(epoch_disc_loss / 2), step=epoch)
 
         # print progress
-        progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_gen_loss / (steps_per_epoch * 2)))
+        progress = "\tAvg Epoch {} Loss {:.4f}".format(epoch + 1, (epoch_gen_loss / 2))
         print(progress)
         print("\tEpoch train time {}".format(time.time() - start))
 

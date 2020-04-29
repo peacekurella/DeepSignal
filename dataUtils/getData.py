@@ -44,6 +44,7 @@ def deserialize_example(example):
 
     return (b_start, buyerJoints), (l_start, leftSellerJoints), (r_start, rightSellerJoints)
 
+
 def prepare_dataset(input, buffer_size, batch_size, drop_remainder):
     """
     Prepares the dataset
