@@ -17,45 +17,38 @@ flags.DEFINE_string('trainData', '../train', 'Train record directory')
 flags.DEFINE_string('meanCsv', 'mean.csv', 'CSV file to store mean')
 flags.DEFINE_string('stdCsv', 'std.csv', 'CSV file to store standard deviation')
 
-def deserialize_example(example):
-    buyerJoints = tf.cast(tf.io.parse_tensor(example['br'], out_type=tf.double), tf.float32)
-    leftSellerJoints = tf.cast(tf.io.parse_tensor(example['ls'], out_type=tf.double), tf.float32)
-    rightSellerJoints = tf.cast(tf.io.parse_tensor(example['rs'], out_type=tf.double), tf.float32)
+class StandardizeClass:
 
-    return buyerJoints, leftSellerJoints, rightSellerJoints
+    def __init__(self):
+        self.mean_data = np.loadtxt(FLAGS.meanCsv, delimiter=",")
+        self.std_data = np.loadtxt(FLAGS.stdCsv, delimiter=",")
+        self.mean_data = np.expand_dims(self.mean_data, axis=0)
+        self.std_data = np.expand_dims(self.std_data, axis=0)
+        self.mean_data_tensor = tf.convert_to_tensor(self.mean_data, dtype=tf.float32)
+        self.std_data_tensor = tf.convert_to_tensor(self.std_data, dtype=tf.float32)
 
-def standardize(joints):
+    @staticmethod
+    def deserialize_example(example):
 
-    mean_data = np.loadtxt("mean.csv", delimiter=",")
-    std_data = np.loadtxt("std.csv", delimiter=",")
+        buyerJoints = tf.cast   (tf.io.parse_tensor(example['br'], out_type=tf.double), tf.float32)
+        leftSellerJoints = tf.cast(tf.io.parse_tensor(example['ls'], out_type=tf.double), tf.float32)
+        rightSellerJoints = tf.cast(tf.io.parse_tensor(example['rs'], out_type=tf.double), tf.float32)
 
-    mean_data = mean_data.reshape(57, 1)
-    mean_data = np.transpose(mean_data)
-    std_data = std_data.reshape(57, 1)
-    std_data = np.transpose(std_data)
+        return buyerJoints, leftSellerJoints, rightSellerJoints
 
-    mean_data = tf.convert_to_tensor(mean_data, dtype=tf.float32)
-    std_data = tf.convert_to_tensor(std_data, dtype=tf.float32)
+    def standardize(self, joints):
 
-    joints = joints - mean_data
+        joints = joints - self.mean_data_tensor
 
-    joints = tf.divide(joints, std_data)
+        joints = tf.divide(joints, self.std_data_tensor)
 
-    return joints
+        return joints
 
-def destandardize(joints):
+    def destandardize(self, joints):
 
-    mean_data = np.loadtxt("mean.csv", delimiter=",")
-    std_data = np.loadtxt("std.csv", delimiter=",")
+        joints = np.multiply(joints, self.std_data) + self.mean_data
 
-    mean_data = mean_data.reshape(57, 1)
-    mean_data = np.transpose(mean_data)
-    std_data = std_data.reshape(57, 1)
-    std_data = np.transpose(std_data)
-
-    joints = np.multiply(joints, std_data) + mean_data
-
-    return joints
+        return joints
 
 def main(argv):
     """
@@ -77,7 +70,7 @@ def main(argv):
     dataset = dataset.map(gd.parse_example)
 
     # deserialize the tensors
-    dataset = dataset.map(deserialize_example)
+    dataset = dataset.map(StandardizeClass.deserialize_example)
 
     merged = []
 
@@ -90,10 +83,8 @@ def main(argv):
     mean_data = np.mean(merged, axis=0)
     std_data = np.std(merged, axis=0)
 
-    mean_data = mean_data.reshape(57, 1)
-    mean_data = np.transpose(mean_data)
-    std_data = std_data.reshape(57, 1)
-    std_data = np.transpose(std_data)
+    mean_data = np.expand_dims(mean_data, axis=0)
+    std_data = np.expand_dims(std_data, axis=0)
 
     np.savetxt(FLAGS.meanCsv, mean_data, delimiter=",")
     np.savetxt(FLAGS.stdCsv, std_data, delimiter=",")
