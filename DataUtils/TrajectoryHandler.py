@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
+
 def absolute_to_relative(prev_state, cur_state):
     """
     Returns relative trajectory from prev_state and cur_state

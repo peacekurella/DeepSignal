@@ -1,9 +1,6 @@
-*.pyc
-*.TFrecord
+Data
 *.pkl
+*.TFrecord
 *.mp4
-*.csv
-ckpt
-ckpt_ae
-logs
-inference
+*.pyc
+*.pem
