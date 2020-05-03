@@ -106,7 +106,7 @@ class TransformationEncoderDecoderMSE:
         time_steps = target_seq.shape[1]
 
         # initialize encoder hidden state
-        enc_hidden = self.encoder.initialize_hidden_state(self.encoder.batch_size)
+        enc_hidden = self.encoder.encoderA.initialize_hidden_state(self.encoder.encoderA.batch_size)
 
         with tf.GradientTape() as tape:
             # pass through encoder
