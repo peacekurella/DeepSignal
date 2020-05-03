@@ -7,6 +7,8 @@ from absl import flags
 from Net.ModelZoo.AutoEncoderMSE import AutoEncoderMSE
 from Net.ModelZoo.ConcatenationEncoderDecoderMSE import ConcatenationEncoderDecoderMSE
 from Net.ModelZoo.ConcatenationEncoderDecoderADV import ConcatenationEncoderDecoderADV
+from Net.ModelZoo.TransformationEncoderDecoderADV import TransformationEncoderDecoderADV
+from Net.ModelZoo.TransformationEncoderDecoderMSE import TransformationEncoderDecoderMSE
 from DataUtils.DataGenerator import DataGenerator
 from DataUtils.TrajectoryHandler import convert_to_absolute
 from DataUtils.InputStandardizer import InputStandardizer
@@ -23,11 +25,11 @@ flags.DEFINE_boolean('standardize_data', True, 'standardize data before training
 
 flags.DEFINE_string('model_code', 'AE', 'Defines the model to load')
 flags.DEFINE_integer('output_dims', 57, 'Number of key points in output')
-flags.DEFINE_integer('enc_size', 16, 'Hidden units in Encoder RNN')
-flags.DEFINE_integer('dec_size', 16, 'Hidden units in Encoder RNN')
-flags.DEFINE_integer('disc_size', 16, 'Hidden units in Discriminator RNN')
-flags.DEFINE_integer('enc_layers', 1, 'Number of layers in encoder')
-flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
+flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
+flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
+flags.DEFINE_integer('disc_size', 512, 'Hidden units in Discriminator RNN')
+flags.DEFINE_integer('enc_layers', 3, 'Number of layers in encoder')
+flags.DEFINE_integer('dec_layers', 3, 'Number of layers in decoder')
 
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 
@@ -59,10 +61,21 @@ def get_input_target(b, l, r):
         input_seq2 = tf.concat([b, l], axis=2)
         target_seq2 = r
 
+    elif FLAGS.model_code in["TEDM", "TEDA"]:
+        input_seq1 = (b, r)
+        target_seq1 = l
+        input_seq2 = (b, l)
+        target_seq2 = r
+
     return input_seq1, target_seq1, input_seq2, target_seq2
 
 
 def get_model():
+    """
+    returns the appropriate model
+    :return:
+    """
+
     if FLAGS.model_code == "AE":
         return AutoEncoderMSE(
             FLAGS.enc_size,
@@ -75,6 +88,7 @@ def get_model():
             0,
             1
         )
+
     elif FLAGS.model_code == "CEDM":
         return ConcatenationEncoderDecoderMSE(
             FLAGS.enc_size,
@@ -88,8 +102,40 @@ def get_model():
             1,
             os.path.join(FLAGS.ckpt, 'AE')
         )
+
+    elif FLAGS.model_code == "TEDM":
+        return TransformationEncoderDecoderMSE(
+            FLAGS.enc_size,
+            FLAGS.batch_size,
+            FLAGS.enc_layers,
+            0,
+            FLAGS.dec_size,
+            FLAGS.output_dims,
+            FLAGS.dec_layers,
+            0,
+            1,
+            os.path.join(FLAGS.ckpt, 'AE')
+        )
+
     elif FLAGS.model_code == "CEDA":
         return ConcatenationEncoderDecoderADV(
+            FLAGS.enc_size,
+            FLAGS.batch_size,
+            FLAGS.enc_layers,
+            0,
+            FLAGS.dec_size,
+            FLAGS.output_dims,
+            FLAGS.dec_layers,
+            0,
+            1,
+            os.path.join(FLAGS.ckpt, 'AE'),
+            FLAGS.disc_size,
+            0,
+            1
+        )
+
+    elif FLAGS.model_code == "TEDA":
+        return TransformationEncoderDecoderADV(
             FLAGS.enc_size,
             FLAGS.batch_size,
             FLAGS.enc_layers,

@@ -8,6 +8,8 @@ import datetime
 from Net.ModelZoo.AutoEncoderMSE import AutoEncoderMSE
 from Net.ModelZoo.ConcatenationEncoderDecoderMSE import ConcatenationEncoderDecoderMSE
 from Net.ModelZoo.ConcatenationEncoderDecoderADV import ConcatenationEncoderDecoderADV
+from Net.ModelZoo.TransformationEncoderDecoderADV import TransformationEncoderDecoderADV
+from Net.ModelZoo.TransformationEncoderDecoderMSE import TransformationEncoderDecoderMSE
 from DataUtils.DataGenerator import DataGenerator
 
 # set up flags
@@ -22,11 +24,11 @@ flags.DEFINE_boolean('standardize_data', True, 'standardize data before training
 
 flags.DEFINE_string('model_code', 'CEDA', 'Defines the model to load')
 flags.DEFINE_integer('output_dims', 57, 'Number of key points in output')
-flags.DEFINE_integer('enc_size', 16, 'Hidden units in Encoder RNN')
-flags.DEFINE_integer('dec_size', 16, 'Hidden units in Encoder RNN')
-flags.DEFINE_integer('disc_size', 16, 'Hidden units in Encoder RNN')
-flags.DEFINE_integer('enc_layers', 1, 'Number of layers in encoder')
-flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
+flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
+flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
+flags.DEFINE_integer('disc_size', 512, 'Hidden units in Encoder RNN')
+flags.DEFINE_integer('enc_layers', 3, 'Number of layers in encoder')
+flags.DEFINE_integer('dec_layers', 3, 'Number of layers in decoder')
 flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
 flags.DEFINE_float('dec_drop', 0.2, 'SequenceDecoder dropout probability')
 flags.DEFINE_float('disc_drop', 0.2, 'SequenceDiscriminator dropout probability')
@@ -66,6 +68,11 @@ def get_input_target(b, l, r):
         input_seq2 = tf.concat([b, l], axis=2)
         target_seq2 = r
 
+    elif FLAGS.model_code in["TEDM", "TEDA"]:
+        input_seq1 = (b, r)
+        target_seq1 = l
+        input_seq2 = (b, l)
+        target_seq2 = r
 
     return input_seq1, target_seq1, input_seq2, target_seq2
 
@@ -93,6 +100,11 @@ def combine_losses(loss1, loss2):
 
 
 def get_model():
+    """
+    Returns the appropriate model
+    :return:
+    """
+
     if FLAGS.model_code == "AE":
         return AutoEncoderMSE(
             FLAGS.enc_size,
@@ -105,6 +117,7 @@ def get_model():
             FLAGS.dec_drop,
             FLAGS.learning_rate
         )
+
     elif FLAGS.model_code == "CEDM":
         return ConcatenationEncoderDecoderMSE(
             FLAGS.enc_size,
@@ -118,8 +131,40 @@ def get_model():
             FLAGS.learning_rate,
             os.path.join(FLAGS.ckpt, 'AE')
         )
+
+    elif FLAGS.model_code == "TEDM":
+        return TransformationEncoderDecoderMSE(
+            FLAGS.enc_size,
+            FLAGS.batch_size,
+            FLAGS.enc_layers,
+            FLAGS.enc_drop,
+            FLAGS.dec_size,
+            FLAGS.output_dims,
+            FLAGS.dec_layers,
+            FLAGS.dec_drop,
+            FLAGS.learning_rate,
+            os.path.join(FLAGS.ckpt, 'AE')
+        )
+
     elif FLAGS.model_code == "CEDA":
         return ConcatenationEncoderDecoderADV(
+            FLAGS.enc_size,
+            FLAGS.batch_size,
+            FLAGS.enc_layers,
+            FLAGS.enc_drop,
+            FLAGS.dec_size,
+            FLAGS.output_dims,
+            FLAGS.dec_layers,
+            FLAGS.dec_drop,
+            FLAGS.learning_rate,
+            os.path.join(FLAGS.ckpt, 'AE'),
+            FLAGS.disc_size,
+            FLAGS.disc_drop,
+            FLAGS.gen_smoothing
+        )
+
+    elif FLAGS.model_code == "TEDA":
+        return TransformationEncoderDecoderADV(
             FLAGS.enc_size,
             FLAGS.batch_size,
             FLAGS.enc_layers,
