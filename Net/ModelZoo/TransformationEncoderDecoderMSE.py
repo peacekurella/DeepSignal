@@ -90,7 +90,7 @@ class TransformationEncoderDecoderMSE:
         """
         self.checkpoint.restore(
             tf.train.latest_checkpoint(checkpoint_dir)
-        )
+        ).expect_partial()
 
     @tf.function
     def train_step(self, input_seq, target_seq):
@@ -165,7 +165,7 @@ class TransformationEncoderDecoderMSE:
         """
 
         # initialize encoder hidden state
-        enc_hidden = self.encoder.initialize_hidden_state(self.encoder.batch_size)
+        enc_hidden = self.encoder.encoderA.initialize_hidden_state(self.encoder.encoderA.batch_size)
 
         # encoder output
         enc_output, enc_hidden = self.encoder(input_seq, enc_hidden, False)

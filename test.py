@@ -10,20 +10,20 @@ from Net.ModelZoo.ConcatenationEncoderDecoderADV import ConcatenationEncoderDeco
 from Net.ModelZoo.TransformationEncoderDecoderADV import TransformationEncoderDecoderADV
 from Net.ModelZoo.TransformationEncoderDecoderMSE import TransformationEncoderDecoderMSE
 from DataUtils.DataGenerator import DataGenerator
-from DataUtils.TrajectoryHandler import convert_to_absolute
+from DataUtils.TrajectoryHandler import convert_to_absolute, transplant_social_formation
 from DataUtils.InputStandardizer import InputStandardizer
 from DataUtils.DataVisualizer import DataVisualizer
 
 # set up flags
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('input', 'Data/train', 'Input Directory')
+flags.DEFINE_string('input', 'Data/test', 'Input Directory')
 flags.DEFINE_string('output', 'Data/inference', 'output directory')
 flags.DEFINE_string('ckpt', 'Data/Checkpoints', 'Directory to store checkpoints')
 flags.DEFINE_string('stats', 'Data/stats', 'Directory to store stats')
 flags.DEFINE_boolean('standardize_data', True, 'standardize data before training')
 
-flags.DEFINE_string('model_code', 'AE', 'Defines the model to load')
+flags.DEFINE_string('model_code', 'TEDM', 'Defines the model to load')
 flags.DEFINE_integer('output_dims', 57, 'Number of key points in output')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
 flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
@@ -201,7 +201,6 @@ def main(args):
 
         # create input and target sequences
         input_seq1, target_seq1, input_seq2, target_seq2 = get_input_target(b, l, r)
-        print(target_seq2.shape)
 
         # run the inference op
         predictions1 = model.run_inference(input_seq1, target_seq1.shape[1], target_seq1[:, 0].shape)
@@ -222,6 +221,10 @@ def main(args):
                 pred2 = predictions2[i].numpy()
                 target1 = target_seq1[i].numpy()
                 target2 = target_seq2[i].numpy()
+
+            # transplant social formation
+            pred1 = transplant_social_formation(target1, pred1)
+            pred2 = transplant_social_formation(target2, pred2)
 
             # convert to absolute values
             b_std = convert_to_absolute(b_start[i], b_std)
