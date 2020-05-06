@@ -6,11 +6,10 @@ from absl import app
 from absl import flags
 from Net.ModelZoo.AutoEncoderMSE import AutoEncoderMSE
 from Net.ModelZoo.ConcatenationEncoderDecoderMSE import ConcatenationEncoderDecoderMSE
-from Net.ModelZoo.ConcatenationEncoderDecoderADV import ConcatenationEncoderDecoderADV
-from Net.ModelZoo.TransformationEncoderDecoderADV import TransformationEncoderDecoderADV
 from Net.ModelZoo.TransformationEncoderDecoderMSE import TransformationEncoderDecoderMSE
+from Net.ModelZoo.TransformationEncoderMSEAE import TransformationEncoderMSEAE
 from DataUtils.DataGenerator import DataGenerator
-from DataUtils.TrajectoryHandler import convert_to_absolute, transplant_social_formation
+from DataUtils.TrajectoryHandler import convert_to_absolute
 from DataUtils.InputStandardizer import InputStandardizer
 from DataUtils.DataVisualizer import DataVisualizer
 
@@ -55,13 +54,13 @@ def get_input_target(b, l, r):
         input_seq2 = r
         target_seq2 = r
 
-    if FLAGS.model_code in ["CEDM", "CEDA"]:
+    if FLAGS.model_code in ["CEDM"]:
         input_seq1 = tf.concat([b, r], axis=2)
         target_seq1 = l
         input_seq2 = tf.concat([b, l], axis=2)
         target_seq2 = r
 
-    elif FLAGS.model_code in["TEDM", "TEDA"]:
+    elif FLAGS.model_code in["TEDM", "TEMA"]:
         input_seq1 = (b, r)
         target_seq1 = l
         input_seq2 = (b, l)
@@ -117,8 +116,8 @@ def get_model():
             os.path.join(FLAGS.ckpt, 'AE')
         )
 
-    elif FLAGS.model_code == "CEDA":
-        return ConcatenationEncoderDecoderADV(
+    elif FLAGS.model_code == "TEMA":
+        return TransformationEncoderMSEAE(
             FLAGS.enc_size,
             FLAGS.batch_size,
             FLAGS.enc_layers,
@@ -128,27 +127,7 @@ def get_model():
             FLAGS.dec_layers,
             0,
             1,
-            os.path.join(FLAGS.ckpt, 'AE'),
-            FLAGS.disc_size,
-            0,
-            1
-        )
-
-    elif FLAGS.model_code == "TEDA":
-        return TransformationEncoderDecoderADV(
-            FLAGS.enc_size,
-            FLAGS.batch_size,
-            FLAGS.enc_layers,
-            0,
-            FLAGS.dec_size,
-            FLAGS.output_dims,
-            FLAGS.dec_layers,
-            0,
-            1,
-            os.path.join(FLAGS.ckpt, 'AE'),
-            FLAGS.disc_size,
-            0,
-            1
+            os.path.join(FLAGS.ckpt, 'AE')
         )
 
 
@@ -221,10 +200,6 @@ def main(args):
                 pred2 = predictions2[i].numpy()
                 target1 = target_seq1[i].numpy()
                 target2 = target_seq2[i].numpy()
-
-            # transplant social formation
-            pred1 = transplant_social_formation(target1, pred1)
-            pred2 = transplant_social_formation(target2, pred2)
 
             # convert to absolute values
             b_std = convert_to_absolute(b_start[i], b_std)

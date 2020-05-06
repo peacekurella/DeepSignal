@@ -4,9 +4,10 @@ from .SingleHeadAttention import SingleHeadAttention
 
 class SequenceDecoder(tf.keras.Model):
 
-    def __init__(self, output_size, dec_units, batch_size, num_layers, dropout_rate):
+    def __init__(self, output_size, dec_units, batch_size, num_layers, dropout_rate, enable_batch_norm):
         """
         Constructor for the decoder class
+        :param enable_batch_norm:
         :param output_size: The size of the output vector
         :param dec_units: Number of hidden units in the GRU cell
         :param batch_size: batch size
@@ -76,6 +77,9 @@ class SequenceDecoder(tf.keras.Model):
             scale=False
         )
 
+        # batch_norm flag
+        self.enable_batch_norm = enable_batch_norm
+
         # initialize batchNorm
         self.batchNorm = []
         for _ in range(num_layers):
@@ -112,7 +116,8 @@ class SequenceDecoder(tf.keras.Model):
                 initial_state = self.hidFc[i](hidden[i])
 
             # add dropout and batchNorm
-            prev_output = self.batchNorm[i](prev_output)
+            if self.enable_batch_norm:
+                prev_output = self.batchNorm[i](prev_output)
             prev_output = self.Dropout(prev_output)
 
             # reshape for GRU input

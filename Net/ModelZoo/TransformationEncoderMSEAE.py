@@ -1,23 +1,25 @@
-from Net.BaseModels.SequenceEncoder import SequenceEncoder
+from Net.BaseModels.TransformationEncoder import TransformationEncoder
 from Net.BaseModels.SequenceDecoder import SequenceDecoder
+from Net.BaseModels.SequenceEncoder import SequenceEncoder
 import tensorflow as tf
 import os
+import sys
 
 # configuration changes for RTX enabled devices
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
 
 
-class AutoEncoderMSE:
+class TransformationEncoderMSEAE:
     """
-    Sequence reconstruction using MSE loss
+    Reconstructs the Auto Encoder's encoding
     """
 
     def __init__(self, enc_units, batch_size, enc_layers, enc_dropout_rate,
                  dec_units, output_size, dec_layers, dec_dropout_rate,
-                 learning_rate):
+                 learning_rate, auto_encoder_dir):
         """
-        Initializes the AutoEncoder class with MSE loss
+        Initializes the Transformation Encoder class with MSE loss
         :param enc_units: Number of hidden units in encoder
         :param batch_size: Batch size for training
         :param enc_layers: Number of layers in the Encoder
@@ -26,11 +28,12 @@ class AutoEncoderMSE:
         :param output_size: Number of output key points
         :param dec_layers: Number of layers in the Decoder
         :param dec_dropout_rate: Decoder Dropout rate
+        :param auto_encoder_dir: checkpoint_dir for auto_encoder
         :param learning_rate: learning rate
         """
 
         # create encoder
-        self.encoder = SequenceEncoder(
+        self.encoder = TransformationEncoder(
             enc_units,
             batch_size,
             enc_layers,
@@ -38,7 +41,22 @@ class AutoEncoderMSE:
         )
 
         # create decoder
-        self.decoder = SequenceDecoder(output_size, dec_units, batch_size, dec_layers, dec_dropout_rate, True)
+        self.decoder = SequenceDecoder(
+            output_size,
+            dec_units,
+            batch_size,
+            dec_layers,
+            dec_dropout_rate,
+            True
+        )
+
+        # create the reconstruction encoder
+        self.reEncoder = SequenceEncoder(
+            enc_units,
+            batch_size,
+            enc_layers,
+            enc_dropout_rate
+        )
 
         # create optimizer
         self.optimizer = tf.keras.optimizers.Adam(
@@ -51,6 +69,20 @@ class AutoEncoderMSE:
             encoder=self.encoder,
             decoder=self.decoder
         )
+
+        # load the decoder from auto encoder
+        auto_encoder = tf.train.Checkpoint(
+            encoder=self.reEncoder,
+            decoder=self.decoder
+        )
+
+        try:
+            auto_encoder.restore(
+                tf.train.latest_checkpoint(auto_encoder_dir)
+            ).expect_partial()
+        except:
+            print("Loading decoder failed")
+            sys.exit(0)
 
     def save_model(self, checkpoint_dir):
         """
@@ -69,7 +101,7 @@ class AutoEncoderMSE:
         """
         self.checkpoint.restore(
             tf.train.latest_checkpoint(checkpoint_dir)
-        )
+        ).expect_partial()
 
     @tf.function
     def train_step(self, input_seq, target_seq):
@@ -80,55 +112,32 @@ class AutoEncoderMSE:
         :return:
         """
 
-        # initialize loss
-        loss = 0
-        time_steps = target_seq.shape[1]
-
-        # initialize encoder hidden state
-        enc_hidden = self.encoder.initialize_hidden_state(self.encoder.batch_size)
-
         with tf.GradientTape() as tape:
-            # pass through encoder
-            enc_output, enc_hidden = self.encoder(input_seq, enc_hidden, True)
+            # auto encoder output
+            zero_state = self.encoder.encoderA.initialize_hidden_state(self.encoder.encoderA.batch_size)
+            auto_output, auto_hidden = self.reEncoder(target_seq, zero_state, True)
 
-            # input the hidden state
-            dec_hidden = enc_hidden
-            dec_input = tf.zeros(target_seq[:, 0].shape)
+            # encoder output
+            enc_output, enc_hidden = self.encoder(input_seq, zero_state, True)
 
-            # start teacher forcing the network
-            for t in range(time_steps):
-                # pass dec_input and target sequence to decoder
-                prediction, dec_hidden, _ = self.decoder(dec_input, dec_hidden, enc_output, True)
+            # calculate losses
+            output_loss = tf.reduce_mean(tf.keras.losses.MSE(auto_output, enc_output))
+            enc_loss = tf.reduce_mean(tf.keras.losses.MSE(auto_hidden, enc_hidden))
+            total_loss = output_loss + enc_loss
 
-                # calculate the loss for every time step
-                losses = tf.keras.losses.MSE(target_seq[:, t], prediction)
-                loss += tf.reduce_mean(losses)
-
-                # purge the tensors from memory
-                del dec_input, prediction
-
-                # set the next target value as input to decoder
-                dec_input = target_seq[:, t]
-
-        # calculate average batch loss
-        batch_loss = (loss / time_steps)
-
-        # get trainable variables
-        variables = self.encoder.trainable_variables + self.decoder.trainable_variables
+        # get the variables
+        variables = self.encoder.trainable_variables
 
         # get the gradients
-        gradients = tape.gradient(loss, variables)
-
-        # purge tape from memory
-        del tape
+        gradients = tape.gradient(total_loss, variables)
 
         # apply gradients to variables
         self.optimizer.apply_gradients(zip(gradients, variables))
 
         loss_dict = {
-            'AE':
+            'TEMA':
                 {
-                    'Reconstruction Loss': batch_loss
+                    'Reconstruction Loss': total_loss
                 }
         }
 
@@ -144,7 +153,7 @@ class AutoEncoderMSE:
         """
 
         # initialize encoder hidden state
-        enc_hidden = self.encoder.initialize_hidden_state(self.encoder.batch_size)
+        enc_hidden = self.encoder.encoderA.initialize_hidden_state(self.encoder.encoderA.batch_size)
 
         # encoder output
         enc_output, enc_hidden = self.encoder(input_seq, enc_hidden, False)

@@ -40,13 +40,7 @@ class ConcatenationEncoderDecoderMSE:
         )
 
         # create decoder
-        self.decoder = SequenceDecoder(
-            output_size,
-            dec_units,
-            batch_size,
-            dec_layers,
-            dec_dropout_rate
-        )
+        self.decoder = SequenceDecoder(output_size, dec_units, batch_size, dec_layers, dec_dropout_rate, True)
 
         # create optimizer
         self.optimizer = tf.keras.optimizers.Adam(
@@ -135,7 +129,7 @@ class ConcatenationEncoderDecoderMSE:
         batch_loss = (loss / time_steps)
 
         # get trainable variables
-        variables = self.encoder.trainable_variables + self.decoder.trainable_variables
+        variables = self.encoder.trainable_variables
 
         # get the gradients
         gradients = tape.gradient(loss, variables)

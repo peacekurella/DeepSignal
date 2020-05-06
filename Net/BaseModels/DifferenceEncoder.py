@@ -2,7 +2,7 @@ import tensorflow as tf
 from .SequenceEncoder import SequenceEncoder
 
 
-class TransformationEncoder(tf.keras.Model):
+class DifferenceEncoder(tf.keras.Model):
 
     def __init__(self, enc_units, batch_size, num_layers, dropout_rate):
         """
@@ -14,7 +14,7 @@ class TransformationEncoder(tf.keras.Model):
         """
 
         # call the super constructor
-        super(TransformationEncoder, self).__init__()
+        super(DifferenceEncoder, self).__init__()
 
         self.encoderA = SequenceEncoder(
             enc_units,
@@ -44,4 +44,4 @@ class TransformationEncoder(tf.keras.Model):
         # encoderB output
         encB_output, encB_hidden = self.encoderB(inputs[1], zero_state, training)
 
-        return (encA_output + encB_output), (encA_hidden + encB_hidden)
+        return (encA_output - encB_output), (encA_hidden - encB_hidden)

@@ -7,9 +7,8 @@ import time
 import datetime
 from Net.ModelZoo.AutoEncoderMSE import AutoEncoderMSE
 from Net.ModelZoo.ConcatenationEncoderDecoderMSE import ConcatenationEncoderDecoderMSE
-from Net.ModelZoo.ConcatenationEncoderDecoderADV import ConcatenationEncoderDecoderADV
-from Net.ModelZoo.TransformationEncoderDecoderADV import TransformationEncoderDecoderADV
 from Net.ModelZoo.TransformationEncoderDecoderMSE import TransformationEncoderDecoderMSE
+from Net.ModelZoo.TransformationEncoderMSEAE import TransformationEncoderMSEAE
 from DataUtils.DataGenerator import DataGenerator
 
 # set up flags
@@ -22,7 +21,7 @@ flags.DEFINE_string('stats', 'Data/stats', 'Directory to store stats')
 flags.DEFINE_boolean('resume_training', False, "Resume training")
 flags.DEFINE_boolean('standardize_data', True, 'standardize data before training')
 
-flags.DEFINE_string('model_code', 'CEDA', 'Defines the model to load')
+flags.DEFINE_string('model_code', 'TEMA', 'Defines the model to load')
 flags.DEFINE_integer('output_dims', 57, 'Number of key points in output')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
 flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
@@ -62,13 +61,13 @@ def get_input_target(b, l, r):
         input_seq2 = r
         target_seq2 = r
 
-    elif FLAGS.model_code in ["CEDM", "CEDA"]:
+    elif FLAGS.model_code in ["CEDM"]:
         input_seq1 = tf.concat([b, r], axis=2)
         target_seq1 = l
         input_seq2 = tf.concat([b, l], axis=2)
         target_seq2 = r
 
-    elif FLAGS.model_code in["TEDM", "TEDA"]:
+    elif FLAGS.model_code in["TEDM", "TEMA"]:
         input_seq1 = (b, r)
         target_seq1 = l
         input_seq2 = (b, l)
@@ -146,8 +145,8 @@ def get_model():
             os.path.join(FLAGS.ckpt, 'AE')
         )
 
-    elif FLAGS.model_code == "CEDA":
-        return ConcatenationEncoderDecoderADV(
+    elif FLAGS.model_code == "TEMA":
+        return TransformationEncoderMSEAE(
             FLAGS.enc_size,
             FLAGS.batch_size,
             FLAGS.enc_layers,
@@ -157,27 +156,7 @@ def get_model():
             FLAGS.dec_layers,
             FLAGS.dec_drop,
             FLAGS.learning_rate,
-            os.path.join(FLAGS.ckpt, 'AE'),
-            FLAGS.disc_size,
-            FLAGS.disc_drop,
-            FLAGS.gen_smoothing
-        )
-
-    elif FLAGS.model_code == "TEDA":
-        return TransformationEncoderDecoderADV(
-            FLAGS.enc_size,
-            FLAGS.batch_size,
-            FLAGS.enc_layers,
-            FLAGS.enc_drop,
-            FLAGS.dec_size,
-            FLAGS.output_dims,
-            FLAGS.dec_layers,
-            FLAGS.dec_drop,
-            FLAGS.learning_rate,
-            os.path.join(FLAGS.ckpt, 'AE'),
-            FLAGS.disc_size,
-            FLAGS.disc_drop,
-            FLAGS.gen_smoothing
+            os.path.join(FLAGS.ckpt, 'AE')
         )
 
 
