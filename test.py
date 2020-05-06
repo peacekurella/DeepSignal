@@ -27,8 +27,8 @@ flags.DEFINE_integer('output_dims', 57, 'Number of key points in output')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
 flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
 flags.DEFINE_integer('disc_size', 512, 'Hidden units in Discriminator RNN')
-flags.DEFINE_integer('enc_layers', 3, 'Number of layers in encoder')
-flags.DEFINE_integer('dec_layers', 3, 'Number of layers in decoder')
+flags.DEFINE_integer('enc_layers', 1, 'Number of layers in encoder')
+flags.DEFINE_integer('dec_layers', 1, 'Number of layers in decoder')
 
 flags.DEFINE_integer('batch_size', 64, 'Mini batch size')
 
