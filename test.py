@@ -22,7 +22,7 @@ flags.DEFINE_string('ckpt', 'Data/Checkpoints', 'Directory to store checkpoints'
 flags.DEFINE_string('stats', 'Data/stats', 'Directory to store stats')
 flags.DEFINE_boolean('standardize_data', True, 'standardize data before training')
 
-flags.DEFINE_string('model_code', 'TEDM', 'Defines the model to load')
+flags.DEFINE_string('model_code', 'TEMA', 'Defines the model to load')
 flags.DEFINE_integer('output_dims', 57, 'Number of key points in output')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
 flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
@@ -234,6 +234,10 @@ def main(args):
 
             # append for calculating metrics
             total_error.append(total_errors1 + total_errors2 / (b_std.shape[0] * b_std.shape[1] * 2))
+
+        # break if number of tests is high enough
+        if count == 100:
+            break
 
     # save the stats
     np.savetxt(

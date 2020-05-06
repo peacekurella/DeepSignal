@@ -40,6 +40,9 @@ class DataVisualizer:
         self.ax = p3.Axes3D(self.fig)
         self.ax.view_init(elev=-60, azim=-90)
         self.ax._axis3don = False
+        self.ax.set_xlim3d(-200, 200)
+        self.ax.set_ylim3d(-200, 200)
+        self.ax.set_zlim3d(-200, 200)
 
         # set up the writer
         # Set up formatting for the movie files

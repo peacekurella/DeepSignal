@@ -133,7 +133,7 @@ class TransformationEncoderMSEAE:
 
         # apply gradients to variables
         self.optimizer.apply_gradients(zip(gradients, variables))
-
+        print(total_loss)
         loss_dict = {
             'TEMA':
                 {

@@ -8,6 +8,7 @@ from DataUtils.DataCleaner import DataCleaner
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('input', 'Data/input', 'Input Directory')
+flags.DEFINE_string('preprocessed', 'Data/preprocessed', 'preprocessed pkl directory')
 flags.DEFINE_string('train', 'Data/train', 'Train record output directory')
 flags.DEFINE_string('test', 'Data/test', 'Train record output directory')
 flags.DEFINE_integer('seqLength', 80, 'Sequence length')
@@ -24,12 +25,12 @@ def main(argv):
     :return:
     """
     # preprocess the data using Data Cleaner, dividing into the training and testing data
-    cleaner = DataCleaner(FLAGS.input, min_length=FLAGS.seqLength)
+    cleaner = DataCleaner(input=FLAGS.input, output=FLAGS.preprocessed, min_length=FLAGS.seqLength)
     cleaner.clean()
 
     # create the record writer
     writer = RecordWriter(
-        FLAGS.input,
+        FLAGS.preprocessed,
         FLAGS.train,
         FLAGS.test,
         FLAGS.testFiles,

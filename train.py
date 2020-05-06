@@ -21,17 +21,15 @@ flags.DEFINE_string('stats', 'Data/stats', 'Directory to store stats')
 flags.DEFINE_boolean('resume_training', False, "Resume training")
 flags.DEFINE_boolean('standardize_data', True, 'standardize data before training')
 
-flags.DEFINE_string('model_code', 'TEMA', 'Defines the model to load')
+flags.DEFINE_string('model_code', 'TEDM', 'Defines the model to load')
 flags.DEFINE_integer('output_dims', 57, 'Number of key points in output')
 flags.DEFINE_integer('enc_size', 512, 'Hidden units in Encoder RNN')
 flags.DEFINE_integer('dec_size', 512, 'Hidden units in Encoder RNN')
-flags.DEFINE_integer('disc_size', 512, 'Hidden units in Encoder RNN')
 flags.DEFINE_integer('enc_layers', 3, 'Number of layers in encoder')
 flags.DEFINE_integer('dec_layers', 3, 'Number of layers in decoder')
 flags.DEFINE_float('enc_drop', 0.2, 'Encoder dropout probability')
 flags.DEFINE_float('dec_drop', 0.2, 'SequenceDecoder dropout probability')
 flags.DEFINE_float('disc_drop', 0.2, 'SequenceDiscriminator dropout probability')
-flags.DEFINE_float('gen_smoothing', 1, 'Smoothing value to use for generator loss')
 
 flags.DEFINE_integer('epochs', 100, 'Number of training epochs')
 flags.DEFINE_integer('buffer_size', 5000, 'shuffle buffer size')
@@ -220,7 +218,6 @@ def main(args):
 
         # start Mini Batch Gradient Descent
         for b, l, r in dataset.shuffle(FLAGS.buffer_size).take(steps_per_epoch):
-
             # discard the trajectory start states
             _, b = b
             _, l = l
