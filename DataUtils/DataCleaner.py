@@ -151,10 +151,11 @@ def bone_lengths(lSJoints, rSJoints, bJoints, humanSkeleton, supersample=0, subs
     return frameBones, problem_frames
 
 
-def get_segments(bones, std_devs=3):
+def get_segments(bones, min_length, std_devs=3):
     """
     Determines which segments of a video"s data are of acceptable quality and length.
     :param bones: Input bone length data for the video"s frames.
+    :param min_length: Minimum length required for acceptable clips of data
     :param std_devs: How many standard deviations to use in noise tolerance
     :return: List of pairs, describing the start and end frames of each acceptable segment.
     """
@@ -185,7 +186,7 @@ def get_segments(bones, std_devs=3):
     segments = []
     for target in range(len(problemFrames) - 1):
         # If a sequence is more than the desired length, add the trimmed version to those accepted.
-        if problemFrames[target + 1] - problemFrames[target] > self.min_length:
+        if problemFrames[target + 1] - problemFrames[target] > min_length:
             segments.append((problemFrames[target] + 1, problemFrames[target + 1]))
 
     # If no problem frames found, write all of the video's data out
@@ -264,7 +265,7 @@ class DataCleaner:
                                                self.supersample, self.subsample)
 
         # Use the bone length data to filter out outliers and excessively noisy data
-        bone_segments = get_segments(frameBones)
+        bone_segments = get_segments(frameBones, self.min_length)
 
         # Merge the information to one list of usable segments
         zero_ptr = 0
@@ -279,7 +280,7 @@ class DataCleaner:
             else:
                 zero_ptr += 1
 
-                # Create a new copy of the data, to be reused for each data segment
+        # Create a new copy of the data, to be reused for each data segment
         new_pickle = copy.deepcopy(group)
 
         # Write new pickle files, each one containing data for exactly one good segment of video
