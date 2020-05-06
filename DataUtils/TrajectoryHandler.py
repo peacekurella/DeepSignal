@@ -115,3 +115,38 @@ def convert_to_absolute(start, trajectory):
         prev_state = np.squeeze(output_sequence[i])
 
     return np.squeeze(np.array(output_sequence))
+
+
+def get_normals(states):
+    """
+    Calculates the normal vectors and body position as extra parameters for the model
+    :param cur_state: Input frame position data as non-standardized values with shape
+    (mini_batch x num_frames x 57)
+    :return: Body normal vector (projected onto x-z plane), face normal vector,
+    and body position (projected onto x-z plane) with shape (mini_batch x num_frames x 7)
+    """
+    norms = np.array((states.shape[0], states.shape[1], 7))
+    for batch in range(states.shape[0]):
+        for frame in range(states.shape[1]):
+            frame = states[batch, frame]
+            hips = frame[18:21] - frame[36:39]      # Vector from left to right hip
+            spine = frame[6:9] - frame[0:3]         # Vector from center of hips to neck
+            ears = frame[54:57] - frame[51:54]      # Vector from left to right ear
+            nose = frame[3:6]
+
+            # Find body's normal vector and project onto the x-z plane
+            body_normal = np.cross(hips, spine)
+            body_normal = np.delete(body_normal, 1)
+            body_normal /= np.linalg.norm(body_normal)
+
+            # Find face's normal vector, using inter-ear vector and nose projection
+            projection = np.dot(nose, ears) * np.linalg.norm(ears) + frame[54:57]
+            face_normal = nose - projection
+            face_normal /= np.linalg.norm(face_normal)
+
+            # Project root position onto the x-z plane
+            body_pos = np.delete(frame[6:9], 1)
+            
+            norms[batch, frame] = np.concatenate(body_normal, face_normal, body_pos)
+
+    return norms
