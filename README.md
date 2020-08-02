@@ -22,4 +22,9 @@ The following command runs the test script
 > python test.py --help
 ```
 
+## Future work 
+  - LSTMs instead of GRUs
+  - Update data representation
+  - Use non deterministic ( VAE ) models for signal generation
+
 Detailed information about the project can be found in report.pdf
