@@ -1,18 +1,15 @@
-# haggling
-Repositiory for social signal prediction
+# DeepSignal
+*A data driven approach to generate non verbal social signals.*
 
-Run the bash script in dataUtils to generate train, test data sets.
-Enter Y on the prompt to enable data normalization, N to skip it. Place
-.pkl files in input directory at the root of the repo.
+Run preprocess.py to preprocess the .pkl files and write them into TFRecords
 ```buildoutcfg
-> bash dataUtils/genDataset.sh
-> Enable Normalization (Y/N) : 
+> python preprocess.py
 ```
 
-After execution of bash script run body2body/train.py to start training the model. 
-The following command to access all command line arguments
+Training requires the data in TFRecord format. All experiment related arguments are given as FLAGS inside the
+train file. 
 ```buildoutcfg
-> python seq2seq/train.py --help
+> python train.py
 ```
 
 To view the tensorboard 
@@ -20,7 +17,9 @@ To view the tensorboard
 > tensorboard --logdir <path to logs>
 ``` 
 
-To run the inference. The following command to access all command line arguments
+The following command runs the test script
 ```buildoutcfg
-> python seq2seq/test.py --help
+> python test.py --help
 ```
+
+Detailed information about the project can be found in report.pdf
