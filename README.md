@@ -1,6 +1,8 @@
 # DeepSignal
 *A data driven approach to generate non verbal social signals.*
 
+## Basic repository usage
+
 Run preprocess.py to preprocess the .pkl files and write them into TFRecords
 ```buildoutcfg
 > python preprocess.py
